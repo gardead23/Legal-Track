@@ -712,12 +712,12 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
   }
 
   return (
-    <WizardStep title="Describe your legal issue">
+    <WizardStep title="Describe your situation so we can recommend the right service">
       <div className="space-y-6">
         <div className="bg-slate-50 p-4 rounded-lg flex gap-3 items-start border border-slate-100">
            <Sparkles className="h-5 w-5 text-brand-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
            <p className="text-sm text-slate-600">
-             Our AI assistant can help route you to the right service. Describe your situation in plain English below.
+             Our assistant can help recommend the right service. Just explain what’s happening — no legal terms needed.
              <span className="block mt-1 italic text-xs text-slate-500">Example: "I need to sue a contractor who took my money but didn't finish the roof."</span>
            </p>
         </div>
@@ -727,11 +727,12 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
           <textarea
             id="issue-description"
             rows={5}
-            className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-slate-900 border-slate-300"
+            className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-slate-900 border-slate-300 bg-white"
             placeholder="What's happening?"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
+          <p className="text-xs text-slate-500 mt-2">Most people write 2–5 sentences.</p>
         </div>
 
         <button 
@@ -747,14 +748,14 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
             </>
           ) : (
             <>
-              Analyze Issue
+              See recommended services
             </>
           )}
         </button>
 
         <div className="text-center">
           <button onClick={onSkip} className="text-sm text-slate-500 hover:text-slate-700 underline focus:outline-none focus:ring-2 focus:ring-slate-500 rounded px-2">
-            Skip to manual selection
+            Choose services manually
           </button>
         </div>
       </div>
@@ -960,7 +961,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
           <textarea 
             id="fact-summary"
             rows={6}
-            className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+            className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white"
             placeholder="Please provide a detailed summary of the facts and your goals..."
             value={data.description || ''}
             onChange={(e) => onChange('description', e.target.value)}

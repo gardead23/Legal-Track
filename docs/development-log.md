@@ -1,5 +1,16 @@
 # SoloScale Legal - Development Log
 
+## v0.1.6 - UX Copy & Polish
+**Status:** High-Fidelity Prototype
+**Focus:** Microcopy & Visual Polish
+
+### 🚀 Features Shipped
+*   **Triage Assistant UX:**
+    *   **Humanized Copy:** Rewrote "AI" references to be more natural ("Our assistant can help recommend the right service").
+    *   **Guidance:** Added sentence length hints ("Most people write 2–5 sentences") to reduce user writer's block.
+    *   **Visual Polish:** Switched text input backgrounds to white (`bg-white`) across the application for a cleaner aesthetic and better readability compared to the previous gray background.
+    *   **Clear Calls to Action:** Renamed buttons to be outcome-focused (e.g., "See recommended services" vs "Analyze Issue", "Choose services manually" vs "Skip").
+
 ## v0.1.5 - Accessibility Polish
 **Status:** High-Fidelity Prototype (WCAG 2.1 Compliant)
 **Focus:** Accessibility (a11y) & Inclusive Design
