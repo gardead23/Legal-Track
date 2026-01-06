@@ -1,5 +1,37 @@
 # SoloScale Legal - Development Log
 
+## v0.1.5 - Accessibility Polish
+**Status:** High-Fidelity Prototype (WCAG 2.1 Compliant)
+**Focus:** Accessibility (a11y) & Inclusive Design
+
+### 🚀 Features Shipped
+*   **WCAG 2.1 Compliance:**
+    *   **Semantic HTML:** Replaced interactive `<div>`s with native `<button>` elements throughout the app (Header, Service Cards, Navigation) to ensure full keyboard navigability.
+    *   **Color Contrast:** Audited and remediated text colors. Darkened `text-slate-400` to `text-slate-500/600` and `text-brand-600` to `text-brand-700` to consistently meet AA/AAA contrast ratios against light backgrounds.
+    *   **Focus Management:** Implemented visible focus rings (`focus:ring-brand-500`) on all interactive elements.
+*   **Form Accessibility:**
+    *   **Screen Reader Support:** Added explicit `htmlFor` and `id` pairings for all inputs. Added `aria-label` to icon-only buttons.
+    *   **Keyboard-Accessible Upload:** Re-engineered the "Drag & Drop" file zone to include a transparent, absolute-positioned input. This allows keyboard users to tab into the drop zone and trigger the system file picker via Space/Enter.
+*   **ARIA Enhancements:**
+    *   **Live Regions:** Added `aria-live="polite"` to the AI analysis button to ensure screen readers announce "Analyzing..." and results dynamically.
+    *   **Modals:** Added `role="dialog"`, `aria-modal="true"`, and proper labelling to the Secure Document Viewer to trap focus and provide context.
+
+## v0.1.4 - AI Intelligence Sprint
+**Status:** High-Fidelity Prototype
+**Focus:** AI Triage & Service Expansion
+
+### 🚀 Features Shipped
+*   **AI Triage Assistant:**
+    *   **Integration:** Integrated Google Gemini 2.5 Flash via `@google/genai` SDK.
+    *   **Constraint Logic:** System strictly classifies user inputs into 7 allowed legal services or fallback "Attorney Review".
+    *   **Safety Rails:** Prompt engineering enforces "No Legal Advice" rules and strictly formatted JSON output.
+    *   **UX:** Users describe issues in plain English -> System highlights recommended services with confidence levels.
+*   **Service Catalog Expansion:**
+    *   Expanded from 3 to **8 tracks** (Contract Review, Demand Letter, Affidavit, Deposition Questionnaire, Motion, Lawsuit Filing, Answer Filing, Attorney Review).
+    *   Added metadata for "Complexity" (High/Medium/Low) to inform future pricing logic.
+*   **Intake Form Generalization:**
+    *   Refactored `DetailsForm` to handle generic litigation inputs (Case Numbers, Court Filings) for the new service tracks.
+
 ## v0.1.3 - Technical Foundations
 **Status:** High-Fidelity Prototype
 **Focus:** Authentication & Data Security

@@ -16,13 +16,14 @@ Unlike generic contact forms, this app strictly filters clients **before** they 
 ---
 
 ## 2. MVP Status (Current Build)
-The current application (`v0.1.3`) is a **High-Fidelity Prototype** with advanced security flows.
+The current application (`v0.1.5`) is a **High-Fidelity Prototype** with advanced security flows.
 
 ### ✅ What Works (Implemented)
 *   **Authentication & Access:**
     *   **Dual Auth:** Magic Links for clients, MFA for attorneys.
     *   **Route Guards:** Protected routes for Portals and Dashboards.
-*   **Intake & Security:**
+*   **Intake & Intelligence:**
+    *   **AI Triage:** Google Gemini analyzes user problems and recommends specific services.
     *   **Jurisdiction Gating:** Hard stop for users outside TX, FL, CO.
     *   **Secure File Upload:** Interface for collecting sensitive docs (encrypted storage simulation).
     *   **Conflict Check:** Flags potential ethical conflicts before engagement.
@@ -32,6 +33,8 @@ The current application (`v0.1.3`) is a **High-Fidelity Prototype** with advance
 *   **Dashboards:**
     *   **Client Portal:** Read-only view of matter status and "Next Steps" guide.
     *   **Attorney Admin:** Kanban-style list, revenue stats, and **Secure Document Viewer**.
+*   **Accessibility & UX:**
+    *   **WCAG 2.1 Compliance:** Full keyboard navigation support, high-contrast text, and screen-reader optimized forms.
 
 ### 🚧 What is Mocked/Pending
 *   **Database:** Currently in-memory. Needs migration to Supabase (Postgres).

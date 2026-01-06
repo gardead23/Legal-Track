@@ -6,6 +6,7 @@
 *   **Icons:** `Lucide React` (clean, accessible SVG icons).
 *   **Auth:** `Supabase Auth` (Magic Links for Clients, MFA for Admins).
 *   **Storage:** `Supabase Storage` (S3 compatible) with RLS.
+*   **AI/LLM:** `Google Gemini 2.5 Flash` via `@google/genai` (For intake triage).
 
 ## 2. Key Architectural Decisions
 
@@ -31,9 +32,11 @@
 **Formula:** `Total = (Base + (Unit * Complexity_Rate)) * Urgency_Multiplier`
 **Reasoning:** Users need to see the price update in real-time as they add "Partners" or "Pages" to feel in control of the cost.
 
-### E. Audit Trails
-**Decision:** Every significant action (Disclaimer Acceptance, Form Submission, Status Change) generates an `AuditEvent` object.
-**Reasoning:** In legal tech, the "system of record" is the defense against malpractice claims. We must prove *when* a user accepted the "Limited Scope" agreement.
+### E. AI Triage Strategy (Strict Classification)
+**Decision:** AI analyzes plain text to suggest services but is RESTRICTED to a hardcoded enum list.
+*   **Constraint:** The LLM prompt explicitly forbids inventing services. It must map to: `Contract Review`, `Demand Letter`, `Affidavit`, `Deposition`, `Motion`, `Lawsuit`, `Answer`.
+*   **Fallback:** Any ambiguity or out-of-scope topic (Criminal, Family Law) maps to `Attorney Review`.
+*   **UX:** AI output is a *suggestion*, not a decision. The user must manually confirm the selection.
 
 ## 3. Data Model (Planned Schema)
 
@@ -45,14 +48,15 @@
 ### `matters`
 *   `id`: UUID
 *   `user_id`: FK -> users.id
-*   `service_type`: Enum
+*   `service_type`: Enum (Expanded to 8 types)
 *   `status`: Enum ('new', 'reviewing', 'flagged', 'closed')
 *   `jurisdiction`: String
 *   `urgency`: Enum ('standard', 'rush')
 *   `price_total`: Integer (cents)
+*   `triage_reasoning`: Text (AI generated rationale)
 
 ### `intake_details` (JSONB)
-*   Stores the flexible form data specific to the service type (e.g., `partner_count` for LLCs, `page_count` for reviews).
+*   Stores the flexible form data specific to the service type (e.g., `partner_count`, `case_number`, `opposing_party`).
 
 ### `documents`
 *   `id`: UUID
