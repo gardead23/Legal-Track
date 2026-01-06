@@ -1,5 +1,37 @@
 # SoloScale Legal - Development Log
 
+## v0.1.3 - Technical Foundations
+**Status:** High-Fidelity Prototype
+**Focus:** Authentication & Data Security
+
+### 🚀 Features Shipped
+*   **Authentication System:**
+    *   **Unified Login:** Single entry point detecting user role based on email.
+    *   **Client Flow (Magic Links):** Implemented passwordless UX where clients enter email -> receive link -> click to auth. (Currently simulated).
+    *   **Admin Flow (MFA):** Implemented high-security flow requiring Password + Time-based OTP (Mocked as `123456`).
+*   **Secure Document Pipeline:**
+    *   **Secure Upload:** Replaced static placeholder with functional file picker in `DetailsForm`.
+    *   **Secure Viewer:** Added `SecureDocViewer` modal in Admin Dashboard.
+    *   **Watermarking:** Viewer overlays "CONFIDENTIAL // ATTORNEY EYES ONLY" and disables right-click/download triggers to prevent data leakage.
+*   **App Logic:**
+    *   **Route Guards:** Redirects unauthenticated users from `/admin` or `/portal` to login.
+    *   **Global State:** Managed user session persistence within the React app lifecycle.
+
+## v0.1.2 - The Handshake Sprint
+**Status:** Functional Prototype (Security Enhanced)
+**Focus:** Legal Compliance & Access Control
+
+### 🚀 Features Shipped
+*   **Engagement Letter Workflow:**
+    *   Added dedicated `EngagementLetter` step to the intake wizard.
+    *   Generates a dynamic "Limited Scope Representation Agreement" using the client's name and selected service.
+    *   Requires a "Digital Signature" (typing name) and checkbox acknowledgment before payment can proceed.
+*   **Security Upgrades:**
+    *   **Admin Gate:** Implemented `AdminLogin` component. The dashboard is now protected by a simulated auth check (hardcoded credentials for demo: `admin@soloscale.com`).
+    *   **Supabase Schema:** Created `supabase/schema.sql` defining the `profiles`, `matters`, and `audit_logs` tables with Row Level Security (RLS) policies.
+*   **Intake Refactor:**
+    *   Split the final "Pricing & Review" step into distinct `Contact` -> `Sign` -> `Pay` steps to mirror real legal workflows.
+
 ## v0.1.1 - UX Refinements
 **Status:** Functional Prototype (Enhanced)
 **Focus:** User Trust & Clarity

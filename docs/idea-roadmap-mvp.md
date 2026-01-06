@@ -16,42 +16,42 @@ Unlike generic contact forms, this app strictly filters clients **before** they 
 ---
 
 ## 2. MVP Status (Current Build)
-The current application (`v0.1.1`) is a functional **Intake Wizard & Dashboard Prototype**.
+The current application (`v0.1.3`) is a **High-Fidelity Prototype** with advanced security flows.
 
 ### ✅ What Works (Implemented)
-*   **Jurisdiction Gating:** Hard stop for users outside TX, FL, CO.
-*   **Service Catalog:** Selection between Contract Review, Business Formation, and Demand Letters.
-*   **Dynamic Pricing Engine:** 
-    *   Calculates Base Price + Complexity Modifiers (Page count, Partner count).
-    *   Applies "Rush Fee" logic (1.5x multiplier) for 24h turnaround.
-*   **Role-Based Views:**
-    *   **Public:** Landing page & Wizard.
-    *   **Client Portal:** Status tracking.
-    *   **Admin Dashboard:** Kanban-style list of matters with conflict flags.
-*   **Mock Backend:** Simulates data persistence, conflict checking against a "blacklist," and audit logging.
-*   **Compliance & UX:** 
-    *   Contextual tooltips (e.g., "Why are we asking this?") to explain data collection needs like Opposing Parties without creating legal liability.
+*   **Authentication & Access:**
+    *   **Dual Auth:** Magic Links for clients, MFA for attorneys.
+    *   **Route Guards:** Protected routes for Portals and Dashboards.
+*   **Intake & Security:**
+    *   **Jurisdiction Gating:** Hard stop for users outside TX, FL, CO.
+    *   **Secure File Upload:** Interface for collecting sensitive docs (encrypted storage simulation).
+    *   **Conflict Check:** Flags potential ethical conflicts before engagement.
+*   **Pricing & Payments:**
+    *   **Dynamic Engine:** Calculates Base + Complexity + Rush logic.
+    *   **Order Summary:** Real-time cost updates.
+*   **Dashboards:**
+    *   **Client Portal:** Read-only view of matter status and "Next Steps" guide.
+    *   **Attorney Admin:** Kanban-style list, revenue stats, and **Secure Document Viewer**.
 
 ### 🚧 What is Mocked/Pending
 *   **Database:** Currently in-memory. Needs migration to Supabase (Postgres).
 *   **Payments:** UI shows credit card field, but Stripe is not connected.
-*   **File Upload:** UI exists, but files are not physically stored in a bucket yet.
+*   **Email Delivery:** Magic links are currently simulated (clicked via UI button) rather than sent via SMTP/Resend.
 
 ---
 
 ## 3. The Roadmap
 
 ### Phase 1: Hardening (The Next Sprint)
-*   **Infrastructure:** Connect `Supabase` for real data persistence.
-*   **Storage:** Implement Secure Bucket storage for document uploads.
+*   **Infrastructure:** Connect `Supabase` for real data persistence (Schema is ready).
 *   **Payments:** Integrate `Stripe Checkout` for real payment processing.
 *   **Async Jobs:** Implement `Trigger.dev` or `Inngest` for handling email notifications and file scanning.
 
 ### Phase 2: Intelligence & Automation
 *   **Fuzzy Conflict Matching:** Upgrade from exact string match to normalized/fuzzy matching (Levenshtein distance) to catch "Evil Corp" vs "Evil Corp, LLC".
 *   **Document Generation:** Map intake form fields directly to `.docx` templates.
-*   **Auth:** Implement Magic Links for passwordless client login.
+*   **Mobile App:** React Native wrapper for the client portal.
 
 ### Phase 3: Scaling
-*   **Mobile App:** React Native wrapper for the client portal.
 *   **API for Partners:** Allow other professionals (CPAs) to refer business directly.
+*   **Multi-Jurisdiction Expansion:** Logic to easily add NY/CA rulesets.

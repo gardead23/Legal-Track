@@ -16,7 +16,13 @@ import {
   ArrowRight,
   Menu,
   X,
-  HelpCircle
+  HelpCircle,
+  FileSignature,
+  PenTool,
+  Upload,
+  Eye,
+  LogOut,
+  Smartphone
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -24,6 +30,15 @@ import {
 type Jurisdiction = 'TX' | 'FL' | 'CO' | 'OTHER';
 
 type ServiceId = 'contract_review' | 'business_formation' | 'demand_letter';
+
+type UserRole = 'guest' | 'client' | 'admin';
+
+interface UserProfile {
+  id: string;
+  email: string;
+  role: UserRole;
+  name: string;
+}
 
 interface ServiceTrack {
   id: ServiceId;
@@ -33,14 +48,30 @@ interface ServiceTrack {
   icon: React.ElementType;
 }
 
+interface SecureDocument {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  secureUrl: string; // In real app, this is a signed URL
+  uploadedAt: string;
+}
+
 interface IntakeData {
   jurisdiction: Jurisdiction;
   serviceId: ServiceId | null;
   urgency: 'standard' | 'rush';
   details: Record<string, any>;
+  documents: SecureDocument[];
   contact: {
     name: string;
     email: string;
+    phone: string;
+  };
+  signature?: {
+    signedName: string;
+    timestamp: string;
+    agreed: boolean;
   };
 }
 
@@ -116,7 +147,7 @@ class MockBackend {
       createdAt: new Date().toISOString(),
       auditLog: [
         { timestamp: new Date().toISOString(), action: 'MATTER_CREATED', details: 'Intake submitted' },
-        { timestamp: new Date().toISOString(), action: 'DISCLAIMER_ACCEPTED', details: 'User accepted NO A/C relationship' }
+        { timestamp: data.signature?.timestamp || new Date().toISOString(), action: 'AGREEMENT_SIGNED', details: `Signed by ${data.signature?.signedName}` }
       ]
     };
 
@@ -142,7 +173,19 @@ const backend = new MockBackend();
 // --- COMPONENTS ---
 
 // 1. Layout & Shared
-const Layout = ({ children, currentView, setView }: { children?: React.ReactNode, currentView: string, setView: (v: string) => void }) => (
+const Layout = ({ 
+  children, 
+  currentView, 
+  setView, 
+  user,
+  onLogout 
+}: { 
+  children?: React.ReactNode, 
+  currentView: string, 
+  setView: (v: string) => void,
+  user: UserProfile | null,
+  onLogout: () => void
+}) => (
   <div className="min-h-screen flex flex-col font-sans">
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -150,10 +193,38 @@ const Layout = ({ children, currentView, setView }: { children?: React.ReactNode
           <Shield className="h-8 w-8 text-brand-600" />
           <span className="font-bold text-xl text-slate-900 tracking-tight">SoloScale Legal</span>
         </div>
-        <nav className="hidden md:flex gap-6 text-sm font-medium text-slate-600">
-          <button onClick={() => setView('home')} className="hover:text-brand-600">Services</button>
-          <button onClick={() => setView('portal')} className="hover:text-brand-600">Client Portal</button>
-          <button onClick={() => setView('admin')} className="text-slate-400 hover:text-slate-600">Admin</button>
+        <nav className="flex items-center gap-6 text-sm font-medium text-slate-600">
+          <button onClick={() => setView('home')} className="hidden md:block hover:text-brand-600">Services</button>
+          
+          {user ? (
+            <>
+              {user.role === 'admin' ? (
+                 <button onClick={() => setView('admin')} className={`hover:text-brand-600 ${currentView === 'admin' ? 'text-brand-600' : ''}`}>Dashboard</button>
+              ) : (
+                 <button onClick={() => setView('portal')} className={`hover:text-brand-600 ${currentView === 'portal' ? 'text-brand-600' : ''}`}>My Portal</button>
+              )}
+              
+              <div className="h-6 w-px bg-slate-300 mx-2"></div>
+              
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 hidden sm:inline-block">
+                  {user.email} ({user.role})
+                </span>
+                <button 
+                  onClick={onLogout}
+                  className="flex items-center gap-1 text-slate-500 hover:text-red-600 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+               <button onClick={() => setView('portal')} className="hover:text-brand-600">Client Portal</button>
+               <button onClick={() => setView('admin')} className="text-slate-400 hover:text-slate-600">Admin</button>
+            </>
+          )}
         </nav>
       </div>
     </header>
@@ -175,7 +246,194 @@ const Layout = ({ children, currentView, setView }: { children?: React.ReactNode
   </div>
 );
 
-// 2. Marketing / Hero
+// 2. Auth System (Feature 2)
+const AuthScreen = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
+  const [step, setStep] = useState<'email' | 'magic_link' | 'password' | 'mfa'>('email');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const isAdmin = email.toLowerCase().includes('admin');
+
+  const handleEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    setLoading(true);
+    setError('');
+
+    setTimeout(() => {
+      setLoading(false);
+      if (isAdmin) {
+        setStep('password');
+      } else {
+        setStep('magic_link');
+      }
+    }, 800);
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      if (password === 'legal123') {
+        setStep('mfa');
+      } else {
+        setError('Invalid password.');
+      }
+    }, 800);
+  };
+
+  const handleMfaSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      if (mfaCode === '123456') {
+        onLogin({
+          id: 'admin-1',
+          email: email,
+          role: 'admin',
+          name: 'Attorney Admin'
+        });
+      } else {
+        setError('Invalid MFA code.');
+      }
+    }, 800);
+  };
+
+  const handleMagicLinkSimulate = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      onLogin({
+        id: 'client-' + Math.floor(Math.random() * 1000),
+        email: email,
+        role: 'client',
+        name: email.split('@')[0]
+      });
+    }, 1000);
+  };
+
+  return (
+    <div className="min-h-[70vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-lg border border-slate-100">
+        <div className="text-center">
+          <Shield className="mx-auto h-12 w-12 text-brand-600" />
+          <h2 className="mt-6 text-3xl font-extrabold text-slate-900">
+            {step === 'email' ? 'Welcome Back' : isAdmin ? 'Attorney Access' : 'Check your inbox'}
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            {step === 'email' && 'Enter your email to sign in to your portal.'}
+            {step === 'magic_link' && `We sent a magic link to ${email}.`}
+            {step === 'password' && 'Please enter your password.'}
+            {step === 'mfa' && 'Enter the 6-digit code from your authenticator app.'}
+          </p>
+        </div>
+
+        {step === 'email' && (
+          <form className="mt-8 space-y-6" onSubmit={handleEmailSubmit}>
+            <div className="rounded-md shadow-sm -space-y-px">
+              <div>
+                <label htmlFor="email-address" className="sr-only">Email address</label>
+                <input
+                  id="email-address"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 disabled:opacity-70"
+              >
+                {loading ? 'Checking...' : 'Continue'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {step === 'password' && (
+          <form className="mt-8 space-y-6" onSubmit={handlePasswordSubmit}>
+             <input
+                type="password"
+                required
+                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-slate-900 hover:bg-slate-800"
+              >
+                {loading ? 'Verifying...' : 'Verify Password'}
+              </button>
+              <div className="text-center text-xs text-slate-400 mt-2">Hint: legal123</div>
+          </form>
+        )}
+
+        {step === 'mfa' && (
+          <form className="mt-8 space-y-6" onSubmit={handleMfaSubmit}>
+             <div className="flex justify-center mb-4">
+                <Smartphone className="h-16 w-16 text-slate-200" />
+             </div>
+             <input
+                type="text"
+                maxLength={6}
+                required
+                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 text-center tracking-widest text-2xl focus:outline-none focus:ring-brand-500 focus:border-brand-500"
+                placeholder="000000"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+              />
+              {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-brand-600 hover:bg-brand-700"
+              >
+                {loading ? 'Authenticating...' : 'Verify Code'}
+              </button>
+              <div className="text-center text-xs text-slate-400 mt-2">Hint: 123456</div>
+          </form>
+        )}
+
+        {step === 'magic_link' && (
+          <div className="mt-8 text-center space-y-6">
+            <div className="bg-green-50 p-4 rounded-lg text-green-700 text-sm">
+              We've sent a temporary login link to <strong>{email}</strong>.
+            </div>
+            <div className="border-t border-slate-100 pt-6">
+              <p className="text-xs text-slate-400 uppercase tracking-wide mb-4">Developer Mode</p>
+              <button
+                onClick={handleMagicLinkSimulate}
+                disabled={loading}
+                className="w-full flex justify-center py-3 px-4 border border-dashed border-brand-300 text-sm font-medium rounded-md text-brand-700 bg-brand-50 hover:bg-brand-100"
+              >
+                {loading ? 'Logging in...' : 'Simulate Clicking Link'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// 3. Marketing / Hero
 const Hero = ({ onStart }: { onStart: () => void }) => (
   <div className="bg-white">
     <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8 text-center">
@@ -213,7 +471,7 @@ const Hero = ({ onStart }: { onStart: () => void }) => (
   </div>
 );
 
-// 3. Intake Wizard Components
+// 4. Intake Wizard Components
 
 const WizardStep = ({ title, children }: { title: string, children?: React.ReactNode }) => (
   <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden border border-slate-100">
@@ -281,8 +539,30 @@ const ServiceSelection = ({ onSelect }: { onSelect: (s: ServiceId) => void }) =>
 );
 
 // Step 3: Details (Dynamic Form)
-const DetailsForm = ({ serviceId, data, onChange, onNext }: any) => {
+const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
   const service = SERVICES.find(s => s.id === serviceId);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      // Simulate reading and uploading to S3
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const doc: SecureDocument = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          secureUrl: event.target?.result as string, // In production, this would be a signed URL
+          uploadedAt: new Date().toISOString()
+        };
+        // Add to documents array
+        const currentDocs = documents || [];
+        onChange('documents', [...currentDocs, doc]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   return (
     <WizardStep title={`Tell us about your ${service?.title}`}>
@@ -290,12 +570,40 @@ const DetailsForm = ({ serviceId, data, onChange, onNext }: any) => {
         {serviceId === 'contract_review' && (
           <>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Upload Document (Mock)</label>
-              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 cursor-pointer">
-                <FileText className="mx-auto h-8 w-8 text-slate-400" />
-                <span className="mt-2 block text-sm font-medium text-slate-600">Click to select file</span>
-                <span className="text-xs text-slate-400">PDF or DOCX up to 10MB</span>
-              </div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Upload Document (Secure)</label>
+              
+              {(!documents || documents.length === 0) ? (
+                 <label className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 cursor-pointer block">
+                  <input type="file" className="hidden" onChange={handleFileUpload} accept=".pdf,.docx,.doc,.jpg,.png" />
+                  <Upload className="mx-auto h-8 w-8 text-brand-500 mb-2" />
+                  <span className="block text-sm font-medium text-slate-700">Click to upload file</span>
+                  <span className="block text-xs text-slate-500 mt-1">PDF, DOCX up to 25MB</span>
+                  <span className="block text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+                    <Lock className="h-3 w-3" /> Encrypted Storage
+                  </span>
+                </label>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((doc: SecureDocument) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
+                      <div className="flex items-center gap-3">
+                         <FileText className="h-5 w-5 text-green-600" />
+                         <div>
+                            <p className="text-sm font-medium text-green-800">{doc.name}</p>
+                            <p className="text-xs text-green-600">{(doc.size / 1024).toFixed(1)} KB • Securely Uploaded</p>
+                         </div>
+                      </div>
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    </div>
+                  ))}
+                  <button 
+                    onClick={() => onChange('documents', [])}
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    Remove and upload different file
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Page Count</label>
@@ -386,8 +694,145 @@ const DetailsForm = ({ serviceId, data, onChange, onNext }: any) => {
   );
 };
 
-// Step 4: Review & Pricing
-const PricingReview = ({ serviceId, data, urgency, setUrgency, onCheckout }: any) => {
+// Step 4: Contact Info
+const ContactForm = ({ contact, onChange, onNext }: any) => {
+  const isComplete = contact.name && contact.email && contact.phone;
+
+  return (
+    <WizardStep title="Your Contact Information">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Full Legal Name</label>
+          <input 
+            type="text" 
+            placeholder="Jane Doe" 
+            className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none"
+            value={contact.name}
+            onChange={(e) => onChange('name', e.target.value)}
+          />
+          <p className="text-xs text-slate-500 mt-1">This name will appear on your engagement letter.</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
+            <input 
+              type="email" 
+              placeholder="jane@example.com" 
+              className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none"
+              value={contact.email}
+              onChange={(e) => onChange('email', e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+            <input 
+              type="tel" 
+              placeholder="(555) 123-4567" 
+              className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none"
+              value={contact.phone}
+              onChange={(e) => onChange('phone', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <button 
+          onClick={onNext}
+          disabled={!isComplete}
+          className="w-full bg-brand-600 text-white py-3 rounded-md font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+        >
+          Review Agreement
+        </button>
+      </div>
+    </WizardStep>
+  );
+};
+
+// Step 5: Engagement Letter
+const EngagementLetter = ({ data, onSign }: any) => {
+  const [agreed, setAgreed] = useState(false);
+  const [signature, setSignature] = useState('');
+  const [date] = useState(new Date().toLocaleDateString());
+  
+  const service = SERVICES.find(s => s.id === data.serviceId);
+  
+  // Calculate price again solely for display in contract (simplified)
+  // In a real app, pass the calculated price prop down
+  const basePrice = service?.basePrice || 0;
+
+  const canSign = agreed && signature.toLowerCase().trim() === data.contact.name.toLowerCase().trim();
+
+  return (
+    <WizardStep title="Limited Scope Representation Agreement">
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 h-64 overflow-y-auto mb-6 text-sm text-slate-700 font-mono leading-relaxed">
+        <p className="font-bold mb-4 text-center">LIMITED SCOPE ENGAGEMENT LETTER</p>
+        <p className="mb-4">
+          <strong>1. PARTIES.</strong> This Agreement is made between SoloScale Legal ("Attorney") and 
+          <span className="bg-yellow-100 px-1 mx-1 font-bold">{data.contact.name}</span> ("Client") 
+          on {date}.
+        </p>
+        <p className="mb-4">
+          <strong>2. SCOPE OF SERVICE.</strong> Attorney agrees to provide the following limited legal services: 
+          <span className="font-bold"> {service?.title}</span>. This representation is limited to this specific task and does not include litigation, appeals, or ongoing advice unless explicitly agreed upon in a new writing.
+        </p>
+        <p className="mb-4">
+          <strong>3. FEES.</strong> Client agrees to pay a flat fee starting at ${basePrice} (subject to complexity adjustments confirmed at checkout). Fees are earned upon receipt but held subject to refund if a conflict of interest is discovered.
+        </p>
+        <p className="mb-4">
+          <strong>4. NO GUARANTEE.</strong> Attorney cannot guarantee the outcome of any legal matter.
+        </p>
+        <p className="mb-4">
+          <strong>5. TERMINATION.</strong> Client may terminate this agreement at any time. Attorney may withdraw for ethical reasons or non-payment.
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        <label className="flex items-start gap-3 cursor-pointer p-3 border rounded-lg hover:bg-slate-50">
+          <input 
+            type="checkbox" 
+            checked={agreed} 
+            onChange={(e) => setAgreed(e.target.checked)} 
+            className="mt-1 h-5 w-5 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
+          />
+          <span className="text-sm text-slate-700">
+            I have read and agree to the terms of the Limited Scope Representation Agreement above. I understand that no attorney-client relationship exists until this agreement is signed and payment is processed.
+          </span>
+        </label>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Digital Signature
+          </label>
+          <div className="relative">
+            <input 
+              type="text" 
+              placeholder={`Type "${data.contact.name}" to sign`}
+              className="w-full p-3 pl-10 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none font-serif italic text-lg"
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+            />
+            <FileSignature className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            By typing your name, you are signing this agreement electronically pursuant to the ESIGN Act.
+          </p>
+        </div>
+
+        <button 
+          onClick={onSign}
+          disabled={!canSign}
+          className="w-full bg-slate-900 text-white py-3 rounded-md font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          <PenTool className="h-4 w-4" />
+          Sign & Continue to Payment
+        </button>
+      </div>
+    </WizardStep>
+  );
+};
+
+// Step 6: Payment (Formerly PricingReview)
+const PaymentGateway = ({ serviceId, data, urgency, setUrgency, onCheckout }: any) => {
   const service = SERVICES.find(s => s.id === serviceId);
   
   const priceBreakdown = useMemo(() => {
@@ -395,11 +840,11 @@ const PricingReview = ({ serviceId, data, urgency, setUrgency, onCheckout }: any
     let complexity = 0;
     let rush = 0;
 
-    if (serviceId === 'contract_review' && data.pageCount > 10) {
-      complexity = (data.pageCount - 10) * 10; // $10 per extra page
+    if (serviceId === 'contract_review' && data.details.pageCount > 10) {
+      complexity = (data.details.pageCount - 10) * 10; // $10 per extra page
     }
-    if (serviceId === 'business_formation' && data.partnerCount > 1) {
-      complexity = (data.partnerCount - 1) * 50; // $50 per extra partner
+    if (serviceId === 'business_formation' && data.details.partnerCount > 1) {
+      complexity = (data.details.partnerCount - 1) * 50; // $50 per extra partner
     }
 
     const subtotal = base + complexity;
@@ -451,15 +896,20 @@ const PricingReview = ({ serviceId, data, urgency, setUrgency, onCheckout }: any
           </div>
         </WizardStep>
 
-        <WizardStep title="Contact & Payment">
+        <WizardStep title="Secure Payment">
            <div className="space-y-4">
-             <input type="text" placeholder="Full Name" className="w-full p-3 border rounded-md" />
-             <input type="email" placeholder="Email Address" className="w-full p-3 border rounded-md" />
-             
+             <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                <div>
+                   <p className="text-sm font-bold text-green-800">Agreement Signed</p>
+                   <p className="text-xs text-green-700">Signed by {data.signature?.signedName} on {new Date(data.signature?.timestamp).toLocaleDateString()}</p>
+                </div>
+             </div>
+
              <div className="mt-4 pt-4 border-t border-slate-100">
                <div className="flex items-center gap-2 text-sm text-slate-600 mb-4 bg-yellow-50 p-3 rounded-md">
                  <Lock className="h-4 w-4" />
-                 Payments processed securely via Stripe. Funds held until conflict check passes.
+                 Funds will be authorized now but only captured after attorney conflict check.
                </div>
                <div className="p-4 border rounded-md bg-slate-50 flex items-center gap-3">
                   <CreditCard className="h-5 w-5 text-slate-400" />
@@ -499,11 +949,8 @@ const PricingReview = ({ serviceId, data, urgency, setUrgency, onCheckout }: any
             onClick={() => onCheckout(priceBreakdown.total)}
             className="w-full mt-6 bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-800 transition-colors shadow-md"
           >
-            Pay & Submit
+            Authorize Payment
           </button>
-          <p className="mt-4 text-xs text-center text-slate-400">
-            By clicking above, you agree to the Terms of Service and understand no attorney-client relationship is formed until explicitly confirmed.
-          </p>
         </div>
       </div>
     </div>
@@ -518,7 +965,7 @@ const SuccessPage = ({ onGoToPortal }: { onGoToPortal: () => void }) => (
     </div>
     <h2 className="text-3xl font-bold text-slate-900 mb-4">Intake Received</h2>
     <p className="text-lg text-slate-600 mb-8">
-      We have received your payment and information. Your attorney is reviewing the file now.
+      We have received your payment authorization and signed agreement. Your attorney is reviewing the file now.
     </p>
     
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 text-left p-6 mb-8">
@@ -583,91 +1030,166 @@ const ClientPortal = () => (
   </div>
 );
 
-const AdminDashboard = () => {
-  const [matters, setMatters] = useState(backend.getMatters());
-
+const SecureDocViewer = ({ doc, onClose }: { doc: SecureDocument, onClose: () => void }) => {
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Attorney Dashboard</h2>
-        <div className="flex gap-2">
-          <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
-            {matters.filter(m => m.status === 'conflict_flagged').length} Conflicts
-          </span>
-          <span className="bg-brand-100 text-brand-800 px-3 py-1 rounded-full text-sm font-medium">
-            {matters.filter(m => m.status === 'new').length} New
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-           {matters.length === 0 && <p className="text-slate-500 italic">No active matters.</p>}
-           {matters.map((matter) => (
-             <div key={matter.id} className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-               <div className="flex justify-between items-start mb-4">
-                 <div>
-                   <h3 className="font-bold text-lg">{matter.data.serviceId?.replace('_', ' ').toUpperCase()}</h3>
-                   <p className="text-sm text-slate-500">Submitted: {new Date(matter.createdAt).toLocaleString()}</p>
-                 </div>
-                 <div className="flex flex-col items-end gap-1">
-                   <span className={`px-2 py-1 text-xs font-bold uppercase rounded ${
-                     matter.status === 'conflict_flagged' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                   }`}>
-                     {matter.status.replace('_', ' ')}
-                   </span>
-                   {matter.data.urgency === 'rush' && (
-                     <span className="text-xs font-bold text-orange-600 flex items-center">
-                       <Clock className="h-3 w-3 mr-1" /> RUSH
-                     </span>
-                   )}
-                 </div>
-               </div>
-               
-               <div className="bg-slate-50 p-3 rounded text-sm text-slate-700 mb-4">
-                 <p><strong>Client:</strong> Mock User</p>
-                 {matter.data.details.opposingParty && (
-                   <p className={backend.checkConflict(matter.data.details.opposingParty) ? "text-red-600 font-bold" : ""}>
-                     <strong>Opposing:</strong> {matter.data.details.opposingParty} 
-                     {backend.checkConflict(matter.data.details.opposingParty) && " (MATCH FOUND)"}
-                   </p>
-                 )}
-                 <p className="truncate mt-1"><strong>Desc:</strong> {matter.data.details.description}</p>
-               </div>
-
-               <div className="border-t border-slate-100 pt-3 mt-3">
-                 <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Audit Log</h4>
-                 <div className="space-y-1">
-                   {matter.auditLog.map((log, idx) => (
-                     <div key={idx} className="flex text-xs text-slate-500">
-                        <span className="w-24 flex-shrink-0 text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                        <span className="font-medium mr-2">{log.action}:</span>
-                        <span className="truncate">{log.details}</span>
-                     </div>
-                   ))}
-                 </div>
-               </div>
+    <div className="fixed inset-0 z-[100] bg-slate-900/90 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-4xl h-[85vh] rounded-lg shadow-2xl flex flex-col relative overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+           <div className="flex items-center gap-3">
+             <div className="p-2 bg-brand-100 rounded-md">
+                <FileText className="h-5 w-5 text-brand-700" />
              </div>
-           ))}
+             <div>
+               <h3 className="font-bold text-slate-900">{doc.name}</h3>
+               <p className="text-xs text-slate-500">SECURE VIEWER • READ ONLY</p>
+             </div>
+           </div>
+           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+             <X className="h-6 w-6 text-slate-500" />
+           </button>
         </div>
         
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 h-fit">
-          <h3 className="font-bold text-slate-900 mb-4">Quick Stats</h3>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-600">Revenue (Simulated)</span>
-              <span className="font-mono font-bold text-green-600">
-                ${matters.reduce((acc, m) => acc + m.price, 0).toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-600">Avg. Turnaround</span>
-              <span className="font-mono font-bold text-slate-900">2.4 Days</span>
+        {/* Content Area */}
+        <div className="flex-grow bg-slate-200 relative overflow-y-auto flex items-center justify-center p-8">
+           {/* Watermark Overlay */}
+           <div className="absolute inset-0 pointer-events-none z-10 flex flex-wrap content-start justify-start opacity-10 select-none overflow-hidden">
+             {Array.from({ length: 40 }).map((_, i) => (
+               <div key={i} className="text-slate-900 font-bold text-xl rotate-[-30deg] p-12 whitespace-nowrap">
+                  CONFIDENTIAL // ATTORNEY EYES ONLY
+               </div>
+             ))}
+           </div>
+           
+           {/* Document Preview */}
+           <div className="bg-white shadow-lg max-w-full z-0 relative">
+              {doc.type.includes('image') ? (
+                <img src={doc.secureUrl} alt="Secure Preview" className="max-w-full max-h-[70vh] object-contain" />
+              ) : (
+                <div className="w-[600px] h-[700px] flex flex-col items-center justify-center p-12 text-slate-400 border border-slate-300">
+                   <FileText className="h-24 w-24 mb-4" />
+                   <p className="text-lg font-medium text-slate-900">Preview not available for {doc.type}</p>
+                   <p className="text-sm">In production, this would render via PDF.js</p>
+                </div>
+              )}
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AdminDashboard = ({ isAuthenticated }: { isAuthenticated: boolean }) => {
+  const [matters, setMatters] = useState(backend.getMatters());
+  const [viewingDoc, setViewingDoc] = useState<SecureDocument | null>(null);
+
+  if (!isAuthenticated) return null;
+
+  return (
+    <>
+      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-slate-900">Attorney Dashboard</h2>
+          <div className="flex gap-2">
+            <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
+              {matters.filter(m => m.status === 'conflict_flagged').length} Conflicts
+            </span>
+            <span className="bg-brand-100 text-brand-800 px-3 py-1 rounded-full text-sm font-medium">
+              {matters.filter(m => m.status === 'new').length} New
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            {matters.length === 0 && <p className="text-slate-500 italic">No active matters.</p>}
+            {matters.map((matter) => (
+              <div key={matter.id} className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-bold text-lg">{matter.data.serviceId?.replace('_', ' ').toUpperCase()}</h3>
+                    <p className="text-sm text-slate-500">Submitted: {new Date(matter.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`px-2 py-1 text-xs font-bold uppercase rounded ${
+                      matter.status === 'conflict_flagged' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {matter.status.replace('_', ' ')}
+                    </span>
+                    {matter.data.urgency === 'rush' && (
+                      <span className="text-xs font-bold text-orange-600 flex items-center">
+                        <Clock className="h-3 w-3 mr-1" /> RUSH
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="bg-slate-50 p-3 rounded text-sm text-slate-700 mb-4">
+                  <p><strong>Client:</strong> {matter.data.contact.name} <span className="text-slate-400 text-xs">({matter.data.contact.email})</span></p>
+                  {matter.data.details.opposingParty && (
+                    <p className={backend.checkConflict(matter.data.details.opposingParty) ? "text-red-600 font-bold" : ""}>
+                      <strong>Opposing:</strong> {matter.data.details.opposingParty} 
+                      {backend.checkConflict(matter.data.details.opposingParty) && " (MATCH FOUND)"}
+                    </p>
+                  )}
+                  <p className="truncate mt-1"><strong>Desc:</strong> {matter.data.details.description}</p>
+                </div>
+
+                {/* Documents Section */}
+                {matter.data.documents && matter.data.documents.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Secure Attachments</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {matter.data.documents.map((doc, idx) => (
+                        <button 
+                          key={idx}
+                          onClick={() => setViewingDoc(doc)}
+                          className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded hover:border-brand-500 hover:text-brand-600 transition-colors text-sm"
+                        >
+                          <Eye className="h-4 w-4" />
+                          {doc.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="border-t border-slate-100 pt-3 mt-3">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Audit Log</h4>
+                  <div className="space-y-1">
+                    {matter.auditLog.map((log, idx) => (
+                      <div key={idx} className="flex text-xs text-slate-500">
+                          <span className="w-24 flex-shrink-0 text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                          <span className="font-medium mr-2">{log.action}:</span>
+                          <span className="truncate">{log.details}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 h-fit">
+            <h3 className="font-bold text-slate-900 mb-4">Quick Stats</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-600">Revenue (Simulated)</span>
+                <span className="font-mono font-bold text-green-600">
+                  ${matters.reduce((acc, m) => acc + m.price, 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-600">Avg. Turnaround</span>
+                <span className="font-mono font-bold text-slate-900">2.4 Days</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {viewingDoc && <SecureDocViewer doc={viewingDoc} onClose={() => setViewingDoc(null)} />}
+    </>
   );
 };
 
@@ -675,12 +1197,17 @@ const AdminDashboard = () => {
 const App = () => {
   const [view, setView] = useState('home');
   const [intakeStep, setIntakeStep] = useState(0);
+  
+  // Auth State
+  const [user, setUser] = useState<UserProfile | null>(null);
+  
   const [intakeData, setIntakeData] = useState<IntakeData>({
     jurisdiction: 'TX',
     serviceId: null,
     urgency: 'standard',
     details: {},
-    contact: { name: '', email: '' }
+    documents: [],
+    contact: { name: '', email: '', phone: '' }
   });
 
   const startIntake = () => {
@@ -688,9 +1215,15 @@ const App = () => {
     setIntakeStep(0);
   };
 
-  const updateIntake = (field: keyof IntakeData | string, value: any) => {
+  const updateIntake = (field: string, value: any) => {
     if (field === 'serviceId' || field === 'jurisdiction' || field === 'urgency') {
       setIntakeData(prev => ({ ...prev, [field]: value }));
+    } else if (field === 'signature') {
+      setIntakeData(prev => ({ ...prev, signature: value }));
+    } else if (field === 'documents') {
+      setIntakeData(prev => ({ ...prev, documents: value }));
+    } else if (['name', 'email', 'phone'].includes(field)) {
+      setIntakeData(prev => ({ ...prev, contact: { ...prev.contact, [field]: value } }));
     } else {
       setIntakeData(prev => ({ ...prev, details: { ...prev.details, [field]: value } }));
     }
@@ -710,15 +1243,61 @@ const App = () => {
     setIntakeStep(2);
   };
 
+  const handleSignature = () => {
+    updateIntake('signature', {
+      signedName: intakeData.contact.name,
+      timestamp: new Date().toISOString(),
+      agreed: true
+    });
+    setIntakeStep(5);
+  }
+
   const handleCheckout = (totalPrice: number) => {
-    // Simulate backend call
     backend.createMatter(intakeData, totalPrice);
+    // Auto-login user after successful submission
+    const newUser: UserProfile = {
+      id: 'client-new',
+      email: intakeData.contact.email,
+      name: intakeData.contact.name,
+      role: 'client'
+    };
+    setUser(newUser);
     setView('success');
   };
 
+  const handleLogin = (authenticatedUser: UserProfile) => {
+    setUser(authenticatedUser);
+    if (authenticatedUser.role === 'admin') {
+      setView('admin');
+    } else {
+      setView('portal');
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setView('home');
+  };
+
+  // Route Guard / Redirect Logic
+  const handleViewChange = (newView: string) => {
+    if ((newView === 'portal' || newView === 'admin') && !user) {
+      setView('auth');
+      return;
+    }
+    setView(newView);
+  }
+
   return (
-    <Layout currentView={view} setView={setView}>
+    <Layout 
+      currentView={view} 
+      setView={handleViewChange} 
+      user={user} 
+      onLogout={handleLogout}
+    >
       {view === 'home' && <Hero onStart={startIntake} />}
+      
+      {view === 'auth' && <AuthScreen onLogin={handleLogin} />}
       
       {view === 'not-eligible' && (
         <div className="max-w-2xl mx-auto mt-20 p-8 bg-white rounded-lg shadow text-center">
@@ -735,11 +1314,10 @@ const App = () => {
       {view === 'intake' && (
         <div className="py-12 px-4">
           <div className="max-w-3xl mx-auto mb-8">
-            {/* Progress Bar */}
             <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-brand-600 transition-all duration-500"
-                style={{ width: `${(intakeStep / 4) * 100}%` }}
+                style={{ width: `${(intakeStep / 5) * 100}%` }}
               />
             </div>
           </div>
@@ -750,14 +1328,28 @@ const App = () => {
             <DetailsForm 
               serviceId={intakeData.serviceId} 
               data={intakeData.details} 
+              documents={intakeData.documents}
               onChange={updateIntake} 
               onNext={() => setIntakeStep(3)} 
             />
           )}
           {intakeStep === 3 && (
-            <PricingReview 
+            <ContactForm
+              contact={intakeData.contact}
+              onChange={updateIntake}
+              onNext={() => setIntakeStep(4)}
+            />
+          )}
+          {intakeStep === 4 && (
+            <EngagementLetter 
+              data={intakeData}
+              onSign={handleSignature}
+            />
+          )}
+          {intakeStep === 5 && (
+            <PaymentGateway 
               serviceId={intakeData.serviceId}
-              data={intakeData.details}
+              data={intakeData}
               urgency={intakeData.urgency}
               setUrgency={(u: any) => updateIntake('urgency', u)}
               onCheckout={handleCheckout}
@@ -770,7 +1362,9 @@ const App = () => {
       
       {view === 'portal' && <ClientPortal />}
       
-      {view === 'admin' && <AdminDashboard />}
+      {view === 'admin' && (
+        <AdminDashboard isAuthenticated={!!user && user.role === 'admin'} />
+      )}
     </Layout>
   );
 };
