@@ -16,7 +16,7 @@ Unlike generic contact forms, this app strictly filters clients **before** they 
 ---
 
 ## 2. MVP Status (Current Build)
-The current application (`v0.1.0`) is a functional **Intake Wizard & Dashboard Prototype**.
+The current application (`v0.1.1`) is a functional **Intake Wizard & Dashboard Prototype**.
 
 ### ✅ What Works (Implemented)
 *   **Jurisdiction Gating:** Hard stop for users outside TX, FL, CO.
@@ -29,6 +29,8 @@ The current application (`v0.1.0`) is a functional **Intake Wizard & Dashboard P
     *   **Client Portal:** Status tracking.
     *   **Admin Dashboard:** Kanban-style list of matters with conflict flags.
 *   **Mock Backend:** Simulates data persistence, conflict checking against a "blacklist," and audit logging.
+*   **Compliance & UX:** 
+    *   Contextual tooltips (e.g., "Why are we asking this?") to explain data collection needs like Opposing Parties without creating legal liability.
 
 ### 🚧 What is Mocked/Pending
 *   **Database:** Currently in-memory. Needs migration to Supabase (Postgres).

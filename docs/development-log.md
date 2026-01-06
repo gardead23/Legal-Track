@@ -1,5 +1,14 @@
 # SoloScale Legal - Development Log
 
+## v0.1.1 - UX Refinements
+**Status:** Functional Prototype (Enhanced)
+**Focus:** User Trust & Clarity
+
+### 🚀 Features Shipped
+*   **Intake Form UX:**
+    *   **Contextual Help:** Added a "Why are we asking this?" text trigger and tooltip to the "Opposing Party Name" field.
+    *   **Microcopy:** Clarified that opposing party info is strictly for conflict checking and case organization, reinforcing the "no attorney-client relationship" disclaimer.
+
 ## v0.1.0 - MVP Prototype (Current Build)
 **Status:** Functional Prototype
 **Focus:** Core Intake Flow, Pricing Logic, and Compliance Guardrails

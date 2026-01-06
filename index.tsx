@@ -15,7 +15,8 @@ import {
   Activity,
   ArrowRight,
   Menu,
-  X
+  X,
+  HelpCircle
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -338,7 +339,19 @@ const DetailsForm = ({ serviceId, data, onChange, onNext }: any) => {
 
         {(serviceId === 'demand_letter' || serviceId === 'contract_review') && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Opposing Party Name</label>
+            <div className="flex items-center gap-2 mb-1">
+              <label className="block text-sm font-medium text-slate-700">Opposing Party Name</label>
+              <div className="relative group">
+                <span className="text-xs text-slate-400 underline decoration-dotted hover:text-slate-600 cursor-help transition-colors">
+                  Why are we asking this?
+                </span>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 pointer-events-none">
+                  <p className="font-bold mb-1 text-slate-200">Why are we asking this?</p>
+                  <p className="leading-relaxed">We use this to identify all parties involved and ensure there are no conflicts before proceeding. It helps us organize your request accurately.</p>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                </div>
+              </div>
+            </div>
             <input 
               type="text" 
               className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none"
