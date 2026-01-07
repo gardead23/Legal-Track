@@ -16,11 +16,12 @@ Unlike generic contact forms, this app strictly filters clients **before** they 
 ---
 
 ## 2. MVP Status (Current Build)
-The current application (`v0.1.8`) is a **High-Fidelity Prototype** with advanced security flows.
+The current application (`v0.1.9`) is a **Deployable Stakeholder Prototype**.
 
 ### ✅ What Works (Implemented)
 *   **Authentication & Access:**
-    *   **Dual Auth:** Magic Links for clients, MFA for attorneys.
+    *   **Stakeholder Gate:** Global password protection (`legal2024`) for safe public demoing.
+    *   **Dual Auth:** Magic Links for clients, MFA for attorneys (Simulated).
     *   **Route Guards:** Protected routes for Portals and Dashboards.
 *   **Intake & Intelligence:**
     *   **AI Triage:** Google Gemini analyzes user problems and recommends specific services.

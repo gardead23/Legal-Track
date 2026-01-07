@@ -238,6 +238,51 @@ const backend = new MockBackend();
 
 // --- COMPONENTS ---
 
+const DemoGate = ({ onAccess }: { onAccess: () => void }) => {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (code.toLowerCase() === 'legal2024') {
+      onAccess();
+    } else {
+      setError('Invalid access code.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 font-sans">
+      <div className="bg-white p-8 rounded-xl shadow-lg max-w-sm w-full border border-slate-200 text-center">
+        <div className="mx-auto bg-brand-100 h-16 w-16 rounded-full flex items-center justify-center mb-6">
+          <Shield className="h-8 w-8 text-brand-600" />
+        </div>
+        <h1 className="text-xl font-bold text-slate-900 mb-2">SoloScale Prototype</h1>
+        <p className="text-sm text-slate-500 mb-6">Restricted Access. Please enter the demo code to view the stakeholder preview.</p>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="password"
+            className="w-full p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none"
+            placeholder="Access Code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            autoFocus
+          />
+          {error && <p className="text-red-600 text-xs font-medium">{error}</p>}
+          <button
+            type="submit"
+            className="w-full bg-slate-900 text-white py-3 rounded-md font-medium hover:bg-slate-800 transition-colors"
+          >
+            Enter Demo
+          </button>
+        </form>
+        <p className="mt-6 text-xs text-slate-400">Hint: legal2024</p>
+      </div>
+    </div>
+  );
+};
+
 const NavConfirmModal = ({ isOpen, onConfirm, onCancel, targetStepLabel }: any) => {
   if (!isOpen) return null;
   return (
@@ -1678,6 +1723,7 @@ const STEPS = [
 ];
 
 const App = () => {
+  const [isDemoAccess, setIsDemoAccess] = useState(false);
   const [view, setView] = useState('home');
   const [intakeStep, setIntakeStep] = useState(0);
   
@@ -1855,6 +1901,10 @@ const App = () => {
     setIntakeStep(navTarget);
     setNavTarget(null);
   };
+
+  if (!isDemoAccess) {
+    return <DemoGate onAccess={() => setIsDemoAccess(true)} />;
+  }
 
   return (
     <Layout 

@@ -1,20 +1,39 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# SoloScale Legal - Prototype
 
-# Run and deploy your AI Studio app
+This is the high-fidelity MVP prototype for **SoloScale Legal**, a productized legal services platform.
 
-This contains everything you need to run your app locally.
+## 🚀 Deployment Status
+This app is currently configured as a **Client-Side Prototype** (SPA).
+It is protected by a client-side password gate for stakeholder review.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1BtrsNlCawNxdbKQOw4jvdpZ7Bu9suSt4
+**Access Code:** `legal2024`
 
-## Run Locally
+## 🛠 Local Development
 
-**Prerequisites:**  Node.js
+1.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
 
+2.  **Set Environment Variables**
+    Create a `.env` file in the root directory:
+    ```env
+    API_KEY=your_gemini_api_key_here
+    ```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+3.  **Run Development Server**
+    ```bash
+    npm run dev
+    ```
+
+## ☁️ Deploy to Vercel
+
+1.  Push this repository to GitHub.
+2.  Import the project into Vercel.
+3.  Add the `API_KEY` environment variable in the Vercel Project Settings.
+4.  Deploy.
+
+## 🔐 Security Note
+This prototype uses client-side environment variable injection for the Gemini API key (`vite.config.ts`).
+**DO NOT** use this configuration for production with real users, as the API key is exposed in the browser bundle.
+This is strictly for password-protected stakeholder demos.
