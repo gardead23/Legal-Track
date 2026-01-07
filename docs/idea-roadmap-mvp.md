@@ -16,7 +16,7 @@ Unlike generic contact forms, this app strictly filters clients **before** they 
 ---
 
 ## 2. MVP Status (Current Build)
-The current application (`v0.1.5`) is a **High-Fidelity Prototype** with advanced security flows.
+The current application (`v0.1.8`) is a **High-Fidelity Prototype** with advanced security flows.
 
 ### ✅ What Works (Implemented)
 *   **Authentication & Access:**
@@ -26,6 +26,7 @@ The current application (`v0.1.5`) is a **High-Fidelity Prototype** with advance
     *   **AI Triage:** Google Gemini analyzes user problems and recommends specific services.
     *   **Jurisdiction Gating:** Hard stop for users outside TX, FL, CO.
     *   **Secure File Upload:** Interface for collecting sensitive docs (encrypted storage simulation).
+    *   **Pre-Signature Review:** Summary screens to verify service details and contact info before contract execution.
     *   **Conflict Check:** Flags potential ethical conflicts before engagement.
 *   **Pricing & Payments:**
     *   **Dynamic Engine:** Calculates Base + Complexity + Rush logic.

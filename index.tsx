@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { 
   Shield, 
   CheckCircle, 
@@ -28,14 +28,14 @@ import {
   Gavel,
   Scale,
   FileQuestion,
-  ScrollText
+  ScrollText,
+  Lightbulb
 } from 'lucide-react';
 
 // --- TYPES ---
 
 type Jurisdiction = 'TX' | 'FL' | 'CO' | 'OTHER';
 
-// Updated strictly to the allowed list + fallback
 type ServiceId = 
   | 'contract_review' 
   | 'demand_letter' 
@@ -44,8 +44,8 @@ type ServiceId =
   | 'motion' 
   | 'filing_lawsuit' 
   | 'filing_answer' 
-  | 'business_formation' // Keeping legacy for demo, though not in strict list request, typically mapped to attorney_review in strict mode
-  | 'attorney_review';   // Fallback
+  | 'business_formation' 
+  | 'attorney_review';
 
 type UserRole = 'guest' | 'client' | 'admin';
 
@@ -70,15 +70,15 @@ interface SecureDocument {
   name: string;
   size: number;
   type: string;
-  secureUrl: string; // In real app, this is a signed URL
+  secureUrl: string;
   uploadedAt: string;
 }
 
 interface IntakeData {
   jurisdiction: Jurisdiction;
   serviceId: ServiceId | null;
-  triageDescription?: string; // Raw user input from triage
-  triageReasoning?: string;   // AI rationale
+  triageDescription?: string;
+  triageReasoning?: string;
   urgency: 'standard' | 'rush';
   details: Record<string, any>;
   documents: SecureDocument[];
@@ -109,9 +109,14 @@ interface AuditEvent {
   details?: string;
 }
 
+interface AiRecommendation {
+  serviceId: ServiceId;
+  reasoning: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
 // --- CONFIG & SERVICES ---
 
-// Expanded to 7 Allowed Services + Fallback
 const SERVICES: ServiceTrack[] = [
   {
     id: 'contract_review',
@@ -171,20 +176,18 @@ const SERVICES: ServiceTrack[] = [
   },
   {
     id: 'attorney_review',
-    title: 'Attorney Review Required',
-    description: 'Complex matter requiring custom scoping.',
-    basePrice: 100, // Consultation fee
+    title: 'Attorney Assessment & Strategy',
+    description: 'A 1-on-1 review of your situation to determine the best legal path. Choose this if your case is complex or doesn\'t fit the standard options.',
+    basePrice: 100, 
     icon: User,
     complexity: 'high'
   }
 ];
 
-// Simple in-memory store for MVP demo
 class MockBackend {
   private matters: Matter[] = [];
   private conflictBlacklist = ['evil corp', 'bad guy', 'fraud llc'];
 
-  // Normalize string for conflict check: lowercase, remove punctuation
   private normalize(str: string): string {
     return str.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
@@ -235,7 +238,44 @@ const backend = new MockBackend();
 
 // --- COMPONENTS ---
 
-// 1. Layout & Shared
+const NavConfirmModal = ({ isOpen, onConfirm, onCancel, targetStepLabel }: any) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[200] bg-slate-900/50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-start gap-4">
+          <div className="bg-yellow-100 p-2 rounded-full">
+            <AlertTriangle className="h-6 w-6 text-yellow-600" aria-hidden="true" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Go back to {targetStepLabel}?</h3>
+            <p className="text-slate-600 mt-2 text-sm">
+              Going back allows you to edit information, but it may invalidate later data (such as your pricing or signature).
+            </p>
+            <p className="text-slate-600 mt-2 text-sm font-medium">
+              You will need to review and click "Continue" on all subsequent steps to re-validate your file.
+            </p>
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <button 
+            onClick={onCancel}
+            className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={onConfirm}
+            className="px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+          >
+            Confirm & Go Back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Layout = ({ 
   children, 
   currentView, 
@@ -314,7 +354,6 @@ const Layout = ({
   </div>
 );
 
-// 2. Auth System
 const AuthScreen = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
   const [step, setStep] = useState<'email' | 'magic_link' | 'password' | 'mfa'>('email');
   const [email, setEmail] = useState('');
@@ -323,7 +362,6 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Focus management
   const emailInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (step === 'email' && emailInputRef.current) emailInputRef.current.focus();
@@ -419,7 +457,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm bg-white"
                   placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -445,7 +483,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
                 id="password"
                 type="password"
                 required
-                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm bg-white"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -474,7 +512,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
                 type="text"
                 maxLength={6}
                 required
-                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 text-center tracking-widest text-2xl focus:outline-none focus:ring-brand-500 focus:border-brand-500"
+                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 text-center tracking-widest text-2xl focus:outline-none focus:ring-brand-500 focus:border-brand-500 bg-white"
                 placeholder="000000"
                 value={mfaCode}
                 onChange={(e) => setMfaCode(e.target.value)}
@@ -514,7 +552,6 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
   );
 };
 
-// 3. Marketing / Hero
 const Hero = ({ onStart }: { onStart: () => void }) => (
   <div className="bg-white">
     <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8 text-center">
@@ -552,8 +589,6 @@ const Hero = ({ onStart }: { onStart: () => void }) => (
   </div>
 );
 
-// 4. Intake Wizard Components
-
 const WizardStep = ({ title, children }: { title: string, children?: React.ReactNode }) => (
   <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden border border-slate-100">
     <div className="px-8 py-6 border-b border-slate-100">
@@ -565,7 +600,6 @@ const WizardStep = ({ title, children }: { title: string, children?: React.React
   </div>
 );
 
-// Step 1: Jurisdiction
 const JurisdictionGate = ({ onSelect }: { onSelect: (j: Jurisdiction) => void }) => {
   return (
     <WizardStep title="First, let's check eligibility">
@@ -595,11 +629,9 @@ const JurisdictionGate = ({ onSelect }: { onSelect: (j: Jurisdiction) => void })
   );
 };
 
-// Step 2: AI Triage Assistant (NEW)
-const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any[], description: string) => void, onSkip: () => void }) => {
-  const [input, setInput] = useState('');
+const TriageAssistant = ({ onResult, onSkip, currentInput }: { onResult: (recommendation: AiRecommendation | null, description: string) => void, onSkip: () => void, currentInput: string }) => {
+  const [input, setInput] = useState(currentInput || '');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [recommendations, setRecommendations] = useState<any[] | null>(null);
 
   const handleAnalyze = async () => {
     if (!input.trim()) return;
@@ -607,7 +639,6 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      // Strict system instruction as per constraints
       const prompt = `
         You are a legal intake triage assistant.
         Your task is to classify the user's issue into one of these EXACT services:
@@ -619,105 +650,64 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
         6. filing_lawsuit
         7. filing_answer
 
-        If the issue describes a criminal matter, family law (divorce/custody), immigration, estate planning, employment dispute, personal injury, or appeals, you MUST classify it as 'attorney_review'.
+        If the issue is ambiguous, describes a criminal matter, family law (divorce/custody), immigration, estate planning, employment dispute, personal injury, appeals, or complex litigation not fitting the above, you MUST classify it as 'attorney_review'.
 
         Strict Rules:
         - Do NOT provide legal advice.
-        - Recommend up to 3 services sorted by relevance.
-        - Return ONLY valid JSON.
+        - Recommend EXACTLY ONE service that is the best fit.
+        
+        Output Rules for 'reasoning':
+        - Tone: Friendly, confident, professional, and non-technical.
+        - Speak directly to the user (e.g., "We recommend this because...").
+        - Do NOT mention internal IDs (like 'attorney_review' or 'contract_review') or technical terms like "defined services".
+        - If classifying as 'attorney_review', explain that the situation appears specific or complex, so a human expert review is the best first step.
+        - Keep it to 1-2 clear sentences.
 
         User Input: "${input}"
-        
-        Output Schema:
-        {
-          "recommendations": [
-            {
-              "serviceId": "string (one of the exact IDs listed above or attorney_review)",
-              "confidence": "high|medium|low",
-              "reasoning": "Brief explanation of why this fits, using hedging language like 'may be appropriate'"
-            }
-          ]
-        }
       `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         contents: prompt,
         config: {
-          responseMimeType: 'application/json'
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              serviceId: { type: Type.STRING },
+              confidence: { type: Type.STRING },
+              reasoning: { type: Type.STRING },
+            },
+          }
         }
       });
 
-      const result = JSON.parse(response.text || '{"recommendations": []}');
-      setRecommendations(result.recommendations);
+      const result = JSON.parse(response.text || '{}');
+      
+      if (result.serviceId) {
+        onResult({
+          serviceId: result.serviceId,
+          confidence: result.confidence,
+          reasoning: result.reasoning
+        }, input);
+      } else {
+        onResult(null, input);
+      }
     } catch (e) {
       console.error("AI Triage Failed", e);
-      // Fallback to manual selection if AI fails
-      onSkip();
+      onResult(null, input);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  if (recommendations) {
-    return (
-      <WizardStep title="Recommended Service Tracks">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 text-brand-700 bg-brand-50 p-4 rounded-lg mb-6 border border-brand-100">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
-            <p className="text-sm">
-              Based on your description, we've identified the following services that may fit your needs. 
-              These are recommendations only and do not constitute legal advice.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {recommendations.map((rec: any, idx: number) => {
-              const service = SERVICES.find(s => s.id === rec.serviceId);
-              if (!service) return null;
-              return (
-                <div key={idx} className="border border-slate-200 rounded-lg p-4 hover:border-brand-500 transition-all">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-slate-100 p-2 rounded-md">
-                        <service.icon className="h-5 w-5 text-slate-700" aria-hidden="true" />
-                      </div>
-                      <h3 className="font-bold text-slate-900">{service.title}</h3>
-                    </div>
-                    <span className="bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded-full font-medium">
-                      {rec.confidence.toUpperCase()} MATCH
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-600 mb-4">{rec.reasoning}</p>
-                  <button 
-                    onClick={() => onResult([rec], input)}
-                    className="w-full py-2 border border-brand-600 text-brand-700 rounded hover:bg-brand-50 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  >
-                    Select {service.title}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-             <p className="text-slate-500 text-sm mb-3">None of these look right?</p>
-             <button onClick={onSkip} className="text-slate-700 font-medium underline hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500 rounded px-2">
-               View Full Service Catalog
-             </button>
-          </div>
-        </div>
-      </WizardStep>
-    );
-  }
-
   return (
-    <WizardStep title="Describe your situation so we can recommend the right service">
+    <WizardStep title="Tell us about your legal issue">
       <div className="space-y-6">
         <div className="bg-slate-50 p-4 rounded-lg flex gap-3 items-start border border-slate-100">
            <Sparkles className="h-5 w-5 text-brand-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
            <p className="text-sm text-slate-600">
-             Our assistant can help recommend the right service. Just explain what’s happening — no legal terms needed.
+             We will analyze your situation and recommend the correct service track. Please include what happened, who is involved, and what outcome you want.
              <span className="block mt-1 italic text-xs text-slate-500">Example: "I need to sue a contractor who took my money but didn't finish the roof."</span>
            </p>
         </div>
@@ -732,7 +722,7 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <p className="text-xs text-slate-500 mt-2">Most people write 2–5 sentences.</p>
+          <p className="text-xs text-slate-500 mt-2">Please do not include sensitive financial account numbers yet.</p>
         </div>
 
         <button 
@@ -748,7 +738,7 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
             </>
           ) : (
             <>
-              See recommended services
+              Analyze & Recommend
             </>
           )}
         </button>
@@ -763,32 +753,89 @@ const TriageAssistant = ({ onResult, onSkip }: { onResult: (recommendations: any
   );
 };
 
-// Step 3: Service Selection (Updated to 7 items)
-const ServiceSelection = ({ onSelect, recommendedIds }: { onSelect: (s: ServiceId) => void, recommendedIds?: ServiceId[] }) => (
+const ServiceRecommendation = ({ recommendation, onConfirm, onShowCatalog }: { recommendation: AiRecommendation, onConfirm: () => void, onShowCatalog: () => void }) => {
+  const service = SERVICES.find(s => s.id === recommendation.serviceId);
+  if (!service) return null;
+
+  return (
+    <WizardStep title="Based on your description, we recommend:">
+      <div className="flex flex-col items-center text-center">
+        <div className="w-full max-w-md bg-white border-2 border-brand-100 rounded-xl p-6 shadow-sm mb-6 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-brand-500"></div>
+          <div className="flex justify-center mb-4">
+             <div className="p-3 bg-brand-50 rounded-full">
+               <service.icon className="h-8 w-8 text-brand-600" aria-hidden="true" />
+             </div>
+          </div>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">{service.title}</h3>
+          <p className="text-sm text-slate-600 mb-4">{recommendation.reasoning}</p>
+          <div className="bg-slate-50 rounded-lg p-3 mb-4">
+             <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Estimated Base Price</p>
+             <p className="text-lg font-bold text-slate-900">${service.basePrice}</p>
+          </div>
+          <button 
+            onClick={onConfirm}
+            className="w-full bg-brand-600 text-white py-3 rounded-md font-medium hover:bg-brand-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-colors"
+          >
+            Continue with {service.title}
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-400 max-w-sm mx-auto mb-6">
+          This recommendation is for informational purposes and does not constitute legal counsel. You are responsible for selecting the service that fits your needs.
+        </p>
+
+        <button 
+          onClick={onShowCatalog}
+          className="text-slate-600 font-medium hover:text-brand-700 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-500 rounded px-2"
+        >
+          No, show me all services
+        </button>
+      </div>
+    </WizardStep>
+  );
+};
+
+const ServiceCatalog = ({ onSelect, recommendation, selectedId }: { onSelect: (s: ServiceId) => void, recommendation?: AiRecommendation | null, selectedId: ServiceId | null }) => (
   <WizardStep title="Service Catalog">
+    <p className="text-slate-600 mb-6">Please select the <strong className="text-slate-800">primary</strong> service you need right now. You can request additional services later.</p>
     <div className="grid grid-cols-1 gap-4">
       {SERVICES.map((service) => {
-        const isRecommended = recommendedIds?.includes(service.id);
+        const isRecommended = recommendation?.serviceId === service.id;
+        const isSelected = selectedId === service.id;
+        const isAssessment = service.id === 'attorney_review';
+
         return (
           <button
             key={service.id}
             onClick={() => onSelect(service.id)}
             className={`flex items-start p-4 border rounded-lg transition-all text-left group relative focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-              isRecommended ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500' : 'hover:border-brand-500 hover:bg-slate-50 border-slate-200'
-            }`}
+              isSelected 
+                ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600' 
+                : isAssessment 
+                  ? 'border-slate-300 bg-slate-50 hover:border-slate-400' 
+                  : 'hover:border-brand-400 hover:bg-slate-50 border-slate-200'
+            } ${isAssessment ? 'mt-4' : ''}`}
           >
             {isRecommended && (
-              <span className="absolute -top-2 -right-2 bg-brand-600 text-white text-xs px-2 py-0.5 rounded-full shadow-sm">
-                Recommended
+              <span className="absolute -top-3 left-4 bg-brand-600 text-white text-xs px-2 py-1 rounded shadow-sm flex items-center gap-1">
+                <Sparkles className="h-3 w-3" /> Recommended based on your input
               </span>
             )}
+            
+            <div className="flex items-center h-full pt-1">
+               <div className={`h-4 w-4 rounded-full border flex items-center justify-center mr-4 ${isSelected ? 'border-brand-600' : 'border-slate-400'}`}>
+                  {isSelected && <div className="h-2 w-2 rounded-full bg-brand-600" />}
+               </div>
+            </div>
+
             <div className="flex-shrink-0 mt-1">
-              <service.icon className={`h-6 w-6 ${isRecommended ? 'text-brand-700' : 'text-slate-400 group-hover:text-brand-600'}`} aria-hidden="true" />
+              <service.icon className={`h-6 w-6 ${isSelected ? 'text-brand-700' : 'text-slate-400 group-hover:text-brand-600'}`} aria-hidden="true" />
             </div>
             <div className="ml-4 w-full">
               <div className="flex justify-between items-center">
-                 <h3 className={`text-lg font-medium ${isRecommended ? 'text-brand-900' : 'text-slate-900 group-hover:text-brand-700'}`}>{service.title}</h3>
-                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{service.complexity} complexity</span>
+                 <h3 className={`text-lg font-medium ${isSelected ? 'text-brand-900' : 'text-slate-900'}`}>{service.title}</h3>
+                 {!isAssessment && <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:inline-block">{service.complexity} complexity</span>}
               </div>
               <p className="mt-1 text-sm text-slate-600 pr-8">{service.description}</p>
               <p className="mt-2 text-sm font-semibold text-brand-700">Starts at ${service.basePrice}</p>
@@ -800,7 +847,6 @@ const ServiceSelection = ({ onSelect, recommendedIds }: { onSelect: (s: ServiceI
   </WizardStep>
 );
 
-// Step 4: Details (Dynamic Form)
 const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
   const service = SERVICES.find(s => s.id === serviceId);
 
@@ -829,7 +875,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
       <label className="block text-sm font-medium text-slate-700 mb-1" id="file-upload-label">{label}</label>
       
       {(!documents || documents.length === 0) ? (
-         <div className="relative border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500">
+         <div className="relative border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 bg-white">
           <input 
             type="file" 
             className="opacity-0 absolute inset-0 w-full h-full cursor-pointer" 
@@ -838,10 +884,10 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
             aria-labelledby="file-upload-label"
           />
           <div className="pointer-events-none">
-            <Upload className="mx-auto h-8 w-8 text-brand-500 mb-2" aria-hidden="true" />
+            <Upload className="mx-auto h-8 w-8 text-brand-600 mb-2" aria-hidden="true" />
             <span className="block text-sm font-medium text-slate-700">Click or drag to upload file</span>
             <span className="block text-xs text-slate-500 mt-1">PDF, DOCX up to 25MB</span>
-            <span className="block text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+            <span className="block text-xs text-slate-500 mt-2 flex items-center justify-center gap-1">
               <Lock className="h-3 w-3" aria-hidden="true" /> Encrypted Storage
             </span>
           </div>
@@ -851,18 +897,18 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
           {documents.map((doc: SecureDocument) => (
             <div key={doc.id} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
               <div className="flex items-center gap-3">
-                 <FileText className="h-5 w-5 text-green-600" aria-hidden="true" />
+                 <FileText className="h-5 w-5 text-green-700" aria-hidden="true" />
                  <div>
                     <p className="text-sm font-medium text-green-800">{doc.name}</p>
                     <p className="text-xs text-green-700">{(doc.size / 1024).toFixed(1)} KB • Securely Uploaded</p>
                  </div>
               </div>
-              <CheckCircle className="h-5 w-5 text-green-600" aria-hidden="true" />
+              <CheckCircle className="h-5 w-5 text-green-700" aria-hidden="true" />
             </div>
           ))}
           <button 
             onClick={() => onChange('documents', [])}
-            className="text-xs text-red-600 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-1"
+            className="text-xs text-red-700 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-1"
           >
             Remove and upload different file
           </button>
@@ -875,7 +921,6 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
     <WizardStep title={`Tell us about your ${service?.title}`}>
       <div className="space-y-6">
         
-        {/* CONTRACT REVIEW */}
         {serviceId === 'contract_review' && (
           <>
             {renderUpload("Upload the Contract for Review")}
@@ -885,7 +930,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
                 id="pageCount"
                 type="number" 
                 min="1"
-                className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+                className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white text-slate-900 placeholder-slate-500"
                 placeholder="e.g. 5"
                 value={data.pageCount || ''}
                 onChange={(e) => onChange('pageCount', parseInt(e.target.value))}
@@ -895,7 +940,6 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
           </>
         )}
 
-        {/* DEMAND LETTER */}
         {serviceId === 'demand_letter' && (
           <>
             {renderUpload("Upload Supporting Evidence (Optional)")}
@@ -904,7 +948,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
               <input 
                 id="opposingParty"
                 type="text" 
-                className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+                className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white text-slate-900 placeholder-slate-500"
                 placeholder="Who receives this letter?"
                 value={data.opposingParty || ''}
                 onChange={(e) => onChange('opposingParty', e.target.value)}
@@ -915,7 +959,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
                <input 
                  id="amountDispute"
                  type="number"
-                 className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+                 className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white text-slate-900 placeholder-slate-500"
                  value={data.amountDispute || ''}
                  onChange={(e) => onChange('amountDispute', e.target.value)}
                />
@@ -923,7 +967,6 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
           </>
         )}
 
-        {/* GENERIC LITIGATION / COMPLEX DOCS */}
         {['affidavit', 'motion', 'filing_lawsuit', 'filing_answer', 'deposition_questionnaire', 'attorney_review'].includes(serviceId) && (
            <>
              {renderUpload("Relevant Documents / Court Filings")}
@@ -934,7 +977,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
                   <input 
                     id="caseNumber"
                     type="text"
-                    className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+                    className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white text-slate-900 placeholder-slate-500"
                     placeholder="e.g. CV-2023-0001"
                     value={data.caseNumber || ''}
                     onChange={(e) => onChange('caseNumber', e.target.value)}
@@ -947,7 +990,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
                 <input 
                   id="opposingParty"
                   type="text" 
-                  className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+                  className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white text-slate-900 placeholder-slate-500"
                   placeholder="Names of other parties involved"
                   value={data.opposingParty || ''}
                   onChange={(e) => onChange('opposingParty', e.target.value)}
@@ -961,7 +1004,7 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
           <textarea 
             id="fact-summary"
             rows={6}
-            className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white"
+            className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white text-slate-900 placeholder-slate-500"
             placeholder="Please provide a detailed summary of the facts and your goals..."
             value={data.description || ''}
             onChange={(e) => onChange('description', e.target.value)}
@@ -980,20 +1023,107 @@ const DetailsForm = ({ serviceId, data, documents, onChange, onNext }: any) => {
   );
 };
 
-// Step 5: Contact Info
 const ContactForm = ({ contact, onChange, onNext }: any) => {
-  const isComplete = contact.name && contact.email && contact.phone;
+  const [confirmEmail, setConfirmEmail] = useState(contact.email || '');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validatePhone = (phone: string) => phone.replace(/[^\d]/g, '').length === 10;
+
+  const formatPhoneNumber = (value: string) => {
+    const numbers = value.replace(/[^\d]/g, '');
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 6) return `(${numbers.slice(0, 3)}) ${numbers.slice(3)}`;
+    return `(${numbers.slice(0, 3)}) ${numbers.slice(3, 6)}-${numbers.slice(6, 10)}`;
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    onChange('email', val);
+    
+    // Clear mismatch error on confirm field if it now matches
+    if (confirmEmail && val === confirmEmail) {
+       setErrors(prev => ({ ...prev, confirmEmail: '' }));
+    } else if (confirmEmail && val !== confirmEmail) {
+       // Only show mismatch error if confirm email field is actively being used
+       setErrors(prev => ({ ...prev, confirmEmail: 'Email addresses don\'t match.' }));
+    }
+
+    if (touched.email) {
+      setErrors(prev => ({
+        ...prev, 
+        email: validateEmail(val) ? '' : 'Please enter a valid email address.'
+      }));
+    }
+  };
+
+  const handleConfirmEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setConfirmEmail(val);
+    if (touched.confirmEmail || val.length > 0) {
+      setErrors(prev => ({
+        ...prev, 
+        confirmEmail: val === contact.email ? '' : 'Email addresses don\'t match.'
+      }));
+    }
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    onChange('phone', formatted);
+    if (touched.phone) {
+       setErrors(prev => ({
+         ...prev, 
+         phone: validatePhone(formatted) ? '' : 'Please enter a valid 10-digit U.S. phone number.'
+       }));
+    }
+  };
+
+  const handleBlur = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    if (field === 'email') {
+      setErrors(prev => ({
+        ...prev, 
+        email: validateEmail(contact.email) ? '' : 'Please enter a valid email address.'
+      }));
+    }
+    if (field === 'confirmEmail') {
+      setErrors(prev => ({
+        ...prev, 
+        confirmEmail: confirmEmail === contact.email ? '' : 'Email addresses don\'t match.'
+      }));
+    }
+    if (field === 'phone') {
+       setErrors(prev => ({
+         ...prev, 
+         phone: validatePhone(contact.phone) ? '' : 'Please enter a valid 10-digit U.S. phone number.'
+       }));
+    }
+  };
+
+  const isComplete = 
+    contact.name && 
+    contact.email && 
+    confirmEmail &&
+    contact.phone &&
+    !errors.email && 
+    !errors.confirmEmail && 
+    !errors.phone &&
+    validateEmail(contact.email) &&
+    confirmEmail === contact.email &&
+    validatePhone(contact.phone);
 
   return (
     <WizardStep title="Your Contact Information">
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div>
           <label htmlFor="full-name" className="block text-sm font-medium text-slate-700 mb-1">Full Legal Name</label>
           <input 
             id="full-name"
             type="text" 
             placeholder="Jane Doe" 
-            className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+            className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300 bg-white"
             value={contact.name}
             onChange={(e) => onChange('name', e.target.value)}
           />
@@ -1007,76 +1137,152 @@ const ContactForm = ({ contact, onChange, onNext }: any) => {
               id="email"
               type="email" 
               placeholder="jane@example.com" 
-              className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
+              className={`w-full p-3 border rounded-md focus:ring-2 focus:outline-none bg-white ${errors.email ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-brand-500'}`}
               value={contact.email}
-              onChange={(e) => onChange('email', e.target.value)}
+              onChange={handleEmailChange}
+              onBlur={() => handleBlur('email')}
             />
+            {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
           </div>
           <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+            <label htmlFor="confirm-email" className="block text-sm font-medium text-slate-700 mb-1">Confirm Email Address</label>
             <input 
-              id="phone"
-              type="tel" 
-              placeholder="(555) 123-4567" 
-              className="w-full p-3 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none border-slate-300"
-              value={contact.phone}
-              onChange={(e) => onChange('phone', e.target.value)}
+              id="confirm-email"
+              type="email" 
+              placeholder="jane@example.com" 
+              className={`w-full p-3 border rounded-md focus:ring-2 focus:outline-none bg-white ${errors.confirmEmail ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-brand-500'}`}
+              value={confirmEmail}
+              onChange={handleConfirmEmailChange}
+              onBlur={() => handleBlur('confirmEmail')}
             />
+             {errors.confirmEmail && <p className="text-xs text-red-600 mt-1">{errors.confirmEmail}</p>}
           </div>
         </div>
 
-        <button 
-          onClick={onNext}
-          disabled={!isComplete}
-          className="w-full bg-brand-600 text-white py-3 rounded-md font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed mt-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500"
-        >
-          Review Agreement
-        </button>
+        <div>
+          <label htmlFor="phone" className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+          <input 
+            id="phone"
+            type="tel" 
+            placeholder="(555) 123-4567" 
+            className={`w-full p-3 border rounded-md focus:ring-2 focus:outline-none bg-white ${errors.phone ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-brand-500'}`}
+            value={contact.phone}
+            onChange={handlePhoneChange}
+            onBlur={() => handleBlur('phone')}
+          />
+          {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone}</p>}
+          <p className="text-xs text-slate-500 mt-1">Used only for case-related communication.</p>
+        </div>
+
+        <div className="pt-2">
+          <button 
+            onClick={onNext}
+            disabled={!isComplete}
+            className="w-full bg-brand-600 text-white py-3 rounded-md font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500"
+          >
+            Review Agreement
+          </button>
+          <p className="text-center text-xs text-slate-400 mt-3">
+             You’ll be able to review and edit this information before submitting.
+          </p>
+        </div>
       </div>
     </WizardStep>
   );
 };
 
-// Step 6: Engagement Letter
-const EngagementLetter = ({ data, onSign }: any) => {
+const EngagementLetter = ({ data, onSign, onEdit }: { data: IntakeData, onSign: () => void, onEdit: () => void }) => {
   const [agreed, setAgreed] = useState(false);
   const [signature, setSignature] = useState('');
   const [date] = useState(new Date().toLocaleDateString());
   
   const service = SERVICES.find(s => s.id === data.serviceId);
   
-  // Calculate price again solely for display in contract (simplified)
-  // In a real app, pass the calculated price prop down
-  const basePrice = service?.basePrice || 0;
+  // Calculate estimated display price (base + complexity only, rush is calculated in next step)
+  let displayPrice = service?.basePrice || 0;
+  if (data.serviceId === 'contract_review' && data.details.pageCount > 10) {
+    displayPrice += (data.details.pageCount - 10) * 10;
+  }
+  if (data.serviceId === 'filing_lawsuit') {
+    displayPrice += 200;
+  }
 
   const canSign = agreed && signature.toLowerCase().trim() === data.contact.name.toLowerCase().trim();
 
   return (
-    <WizardStep title="Limited Scope Representation Agreement">
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 h-64 overflow-y-auto mb-6 text-sm text-slate-700 font-mono leading-relaxed" tabIndex={0} aria-label="Engagement Letter Text">
-        <p className="font-bold mb-4 text-center">LIMITED SCOPE ENGAGEMENT LETTER</p>
-        <p className="mb-4">
-          <strong>1. PARTIES.</strong> This Agreement is made between SoloScale Legal ("Attorney") and 
-          <span className="bg-yellow-100 px-1 mx-1 font-bold">{data.contact.name}</span> ("Client") 
-          on {date}.
-        </p>
-        <p className="mb-4">
-          <strong>2. SCOPE OF SERVICE.</strong> Attorney agrees to provide the following limited legal services: 
-          <span className="font-bold"> {service?.title}</span>. This representation is limited to this specific task and does not include litigation, appeals, or ongoing advice unless explicitly agreed upon in a new writing.
-        </p>
-        <p className="mb-4">
-          <strong>3. FEES.</strong> Client agrees to pay a flat fee starting at ${basePrice} (subject to complexity adjustments confirmed at checkout). Fees are earned upon receipt but held subject to refund if a conflict of interest is discovered.
-        </p>
-        <p className="mb-4">
-          <strong>4. NO GUARANTEE.</strong> Attorney cannot guarantee the outcome of any legal matter.
-        </p>
-        <p className="mb-4">
-          <strong>5. TERMINATION.</strong> Client may terminate this agreement at any time. Attorney may withdraw for ethical reasons or non-payment.
-        </p>
+    <WizardStep title="Review & Sign">
+      
+      {/* 1. Service Summary */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 mb-8 flex flex-col sm:flex-row gap-4 items-start">
+         <div className="p-3 bg-white border border-slate-200 rounded-md shadow-sm">
+            {service?.icon && React.createElement(service.icon, { className: "h-6 w-6 text-brand-600" })}
+         </div>
+         <div className="flex-grow">
+            <h3 className="font-bold text-slate-900 text-lg">{service?.title}</h3>
+            <p className="text-slate-600 text-sm mt-1">{service?.description}</p>
+         </div>
+         <div className="flex-shrink-0 text-right">
+            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Est. Total</p>
+            <p className="text-xl font-bold text-slate-900">${displayPrice}</p>
+         </div>
+      </div>
+
+      {/* 2. Contact Information Summary */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <User className="h-4 w-4 text-slate-400" />
+                Contact Information
+            </h3>
+            <button 
+                onClick={onEdit}
+                className="text-xs font-medium text-brand-600 hover:text-brand-800 hover:underline flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-brand-500 rounded px-1"
+            >
+                <PenTool className="h-3 w-3" /> Edit
+            </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+            <div>
+                <p className="text-xs text-slate-500 mb-1">Full Legal Name</p>
+                <p className="font-medium text-slate-900">{data.contact.name}</p>
+            </div>
+            <div>
+                <p className="text-xs text-slate-500 mb-1">Email Address</p>
+                <p className="font-medium text-slate-900">{data.contact.email}</p>
+            </div>
+            <div>
+                <p className="text-xs text-slate-500 mb-1">Phone Number</p>
+                <p className="font-medium text-slate-900">{data.contact.phone}</p>
+            </div>
+        </div>
       </div>
 
       <div className="space-y-6">
-        <label className="flex items-start gap-3 cursor-pointer p-3 border rounded-lg hover:bg-slate-50 border-slate-200">
+        <h3 className="text-lg font-bold text-slate-900 mb-4">Agreement Terms</h3>
+
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 h-64 overflow-y-auto mb-6 text-sm text-slate-700 font-mono leading-relaxed shadow-inner" tabIndex={0} aria-label="Engagement Letter Text">
+          <p className="font-bold mb-4 text-center">LIMITED SCOPE ENGAGEMENT LETTER</p>
+          <p className="mb-4">
+            <strong>1. PARTIES.</strong> This Agreement is made between SoloScale Legal ("Attorney") and 
+            <span className="bg-yellow-100 px-1 mx-1 font-bold">{data.contact.name}</span> ("Client") 
+            on {date}.
+          </p>
+          <p className="mb-4">
+            <strong>2. SCOPE OF SERVICE.</strong> Attorney agrees to provide the following limited legal services: 
+            <span className="font-bold"> {service?.title}</span>. This representation is limited to this specific task and does not include litigation, appeals, or ongoing advice unless explicitly agreed upon in a new writing.
+          </p>
+          <p className="mb-4">
+            <strong>3. FEES.</strong> Client agrees to pay a flat fee starting at ${displayPrice} (subject to complexity adjustments confirmed at checkout). Fees are earned upon receipt but held subject to refund if a conflict of interest is discovered.
+          </p>
+          <p className="mb-4">
+            <strong>4. NO GUARANTEE.</strong> Attorney cannot guarantee the outcome of any legal matter.
+          </p>
+          <p className="mb-4">
+            <strong>5. TERMINATION.</strong> Client may terminate this agreement at any time. Attorney may withdraw for ethical reasons or non-payment.
+          </p>
+        </div>
+
+        <label className="flex items-start gap-3 cursor-pointer p-3 border rounded-lg hover:bg-slate-50 border-slate-200 transition-colors">
           <input 
             type="checkbox" 
             checked={agreed} 
@@ -1097,7 +1303,7 @@ const EngagementLetter = ({ data, onSign }: any) => {
               id="signature"
               type="text" 
               placeholder={`Type "${data.contact.name}" to sign`}
-              className="w-full p-3 pl-10 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none font-serif italic text-lg border-slate-300"
+              className="w-full p-3 pl-10 border rounded-md focus:ring-2 focus:ring-brand-500 focus:outline-none font-serif italic text-lg border-slate-300 bg-white"
               value={signature}
               onChange={(e) => setSignature(e.target.value)}
             />
@@ -1111,7 +1317,7 @@ const EngagementLetter = ({ data, onSign }: any) => {
         <button 
           onClick={onSign}
           disabled={!canSign}
-          className="w-full bg-slate-900 text-white py-3 rounded-md font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+          className="w-full bg-slate-900 text-white py-3 rounded-md font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors shadow-sm"
         >
           <PenTool className="h-4 w-4" aria-hidden="true" />
           Sign & Continue to Payment
@@ -1121,7 +1327,6 @@ const EngagementLetter = ({ data, onSign }: any) => {
   );
 };
 
-// Step 7: Payment (Formerly PricingReview)
 const PaymentGateway = ({ serviceId, data, urgency, setUrgency, onCheckout }: any) => {
   const service = SERVICES.find(s => s.id === serviceId);
   
@@ -1130,17 +1335,16 @@ const PaymentGateway = ({ serviceId, data, urgency, setUrgency, onCheckout }: an
     let complexity = 0;
     let rush = 0;
 
-    // Pricing Logic for new services
     if (serviceId === 'contract_review' && data.details.pageCount > 10) {
       complexity = (data.details.pageCount - 10) * 10;
     }
     if (serviceId === 'filing_lawsuit') {
-      complexity = 200; // Flat complexity add-on for filing fees logic (mock)
+      complexity = 200; 
     }
 
     const subtotal = base + complexity;
     if (urgency === 'rush') {
-      rush = subtotal * 0.5; // 50% rush fee
+      rush = subtotal * 0.5;
     }
 
     return { base, complexity, rush, total: subtotal + rush };
@@ -1248,7 +1452,6 @@ const PaymentGateway = ({ serviceId, data, urgency, setUrgency, onCheckout }: an
   );
 };
 
-// 8. Success / Next Steps (Unchanged mostly)
 const SuccessPage = ({ onGoToPortal }: { onGoToPortal: () => void }) => (
   <div className="max-w-2xl mx-auto text-center pt-10">
     <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-green-100 mb-6">
@@ -1285,13 +1488,10 @@ const SuccessPage = ({ onGoToPortal }: { onGoToPortal: () => void }) => (
   </div>
 );
 
-// ... (ClientPortal, SecureDocViewer, AdminDashboard remain mostly same, just ensuring updated Service IDs don't break them) ...
-
 const SecureDocViewer = ({ doc, onClose }: { doc: SecureDocument, onClose: () => void }) => {
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/90 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div className="bg-white w-full max-w-4xl h-[85vh] rounded-lg shadow-2xl flex flex-col relative overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
            <div className="flex items-center gap-3">
              <div className="p-2 bg-brand-100 rounded-md">
@@ -1307,9 +1507,7 @@ const SecureDocViewer = ({ doc, onClose }: { doc: SecureDocument, onClose: () =>
            </button>
         </div>
         
-        {/* Content Area */}
         <div className="flex-grow bg-slate-200 relative overflow-y-auto flex items-center justify-center p-8">
-           {/* Watermark Overlay */}
            <div className="absolute inset-0 pointer-events-none z-10 flex flex-wrap content-start justify-start opacity-10 select-none overflow-hidden" aria-hidden="true">
              {Array.from({ length: 40 }).map((_, i) => (
                <div key={i} className="text-slate-900 font-bold text-xl rotate-[-30deg] p-12 whitespace-nowrap">
@@ -1318,7 +1516,6 @@ const SecureDocViewer = ({ doc, onClose }: { doc: SecureDocument, onClose: () =>
              ))}
            </div>
            
-           {/* Document Preview */}
            <div className="bg-white shadow-lg max-w-full z-0 relative">
               {doc.type.includes('image') ? (
                 <img src={doc.secureUrl} alt="Secure Preview" className="max-w-full max-h-[70vh] object-contain" />
@@ -1396,7 +1593,6 @@ const AdminDashboard = ({ isAuthenticated }: { isAuthenticated: boolean }) => {
                   )}
                 </div>
 
-                {/* Documents Section */}
                 {matter.data.documents && matter.data.documents.length > 0 && (
                   <div className="mb-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Secure Attachments</h4>
@@ -1441,7 +1637,6 @@ const AdminDashboard = ({ isAuthenticated }: { isAuthenticated: boolean }) => {
   );
 };
 
-// ... (ClientPortal placeholder remains similar, just standard react component) ...
 const ClientPortal = () => (
   <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
     <h2 className="text-2xl font-bold text-slate-900 mb-6">Your Matters</h2>
@@ -1472,14 +1667,27 @@ const ClientPortal = () => (
   </div>
 );
 
-// 6. Main App Controller
+const STEPS = [
+  { label: 'Jurisdiction', id: 0 },
+  { label: 'Triage', id: 1 },
+  { label: 'Service', id: 2 },
+  { label: 'Details', id: 3 },
+  { label: 'Contact', id: 4 },
+  { label: 'Review', id: 5 },
+  { label: 'Pay', id: 6 },
+];
+
 const App = () => {
   const [view, setView] = useState('home');
   const [intakeStep, setIntakeStep] = useState(0);
   
-  // Auth State
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [aiRecommendedIds, setAiRecommendedIds] = useState<ServiceId[]>([]);
+  
+  // Revised state for recommendations
+  const [aiRecommendation, setAiRecommendation] = useState<AiRecommendation | null>(null);
+  const [showFullCatalog, setShowFullCatalog] = useState(false);
+  
+  const [navTarget, setNavTarget] = useState<number | null>(null);
   
   const [intakeData, setIntakeData] = useState<IntakeData>({
     jurisdiction: 'TX',
@@ -1493,6 +1701,16 @@ const App = () => {
   const startIntake = () => {
     setView('intake');
     setIntakeStep(0);
+    setAiRecommendation(null);
+    setShowFullCatalog(false);
+    setIntakeData({
+        jurisdiction: 'TX',
+        serviceId: null,
+        urgency: 'standard',
+        details: {},
+        documents: [],
+        contact: { name: '', email: '', phone: '' }
+    });
   };
 
   const updateIntake = (field: string, value: any) => {
@@ -1516,28 +1734,55 @@ const App = () => {
       setView('not-eligible');
     } else {
       updateIntake('jurisdiction', j);
-      setIntakeStep(1); // Go to Triage
+      setIntakeStep(1); 
+      // Clear downstream data on restart/edit
+      setAiRecommendation(null);
+      updateIntake('serviceId', null);
     }
   };
 
-  const handleTriageResult = (recommendations: any[], description: string) => {
-     // Store the description for the attorney
+  const handleTriageResult = (recommendation: AiRecommendation | null, description: string) => {
      setIntakeData(prev => ({ ...prev, details: { ...prev.details, description } }));
      
-     // Store the reasoning if they selected the top match
-     if(recommendations.length > 0) {
-       updateIntake('triageReasoning', recommendations[0].reasoning);
-       
-       // Highlights
-       setAiRecommendedIds(recommendations.map(r => r.serviceId));
+     if(recommendation) {
+       setAiRecommendation(recommendation);
+       updateIntake('triageReasoning', recommendation.reasoning);
+       // Logic: If high confidence, we show confirmation screen (default state).
+       // If low confidence, we show catalog immediately.
+       if (recommendation.confidence === 'low') {
+         setShowFullCatalog(true);
+       } else {
+         setShowFullCatalog(false);
+       }
+     } else {
+       setAiRecommendation(null);
+       setShowFullCatalog(true);
      }
 
-     // If confidence is high on the first one, we could auto-select, but let's show the catalog with highlights
      setIntakeStep(2);
+  }
+  
+  const handleRecommendationConfirm = () => {
+      if (aiRecommendation) {
+          updateIntake('serviceId', aiRecommendation.serviceId as ServiceId);
+          setIntakeStep(3);
+      }
   }
 
   const handleServiceSelect = (sid: ServiceId) => {
+    // If the selection is different from the recommendation, use the manual selection
     updateIntake('serviceId', sid);
+    
+    // Reset pricing dependent details if service type changes
+    if (sid !== intakeData.serviceId) {
+       setIntakeData(prev => ({
+         ...prev,
+         serviceId: sid,
+         details: { description: prev.details.description }, // keep description
+         documents: [],
+         signature: undefined
+       }));
+    }
     setIntakeStep(3);
   };
 
@@ -1552,7 +1797,6 @@ const App = () => {
 
   const handleCheckout = (totalPrice: number) => {
     backend.createMatter(intakeData, totalPrice);
-    // Auto-login user after successful submission
     const newUser: UserProfile = {
       id: 'client-new',
       email: intakeData.contact.email,
@@ -1577,7 +1821,6 @@ const App = () => {
     setView('home');
   };
 
-  // Route Guard / Redirect Logic
   const handleViewChange = (newView: string) => {
     if ((newView === 'portal' || newView === 'admin') && !user) {
       setView('auth');
@@ -1585,6 +1828,33 @@ const App = () => {
     }
     setView(newView);
   }
+  
+  const handleNavRequest = (stepIndex: number) => {
+    if (stepIndex >= intakeStep) return;
+    setNavTarget(stepIndex);
+  };
+
+  const handleNavConfirm = () => {
+    if (navTarget === null) return;
+    
+    // Invalidation Logic
+    if (navTarget <= 1) { // Going back to Jurisdiction or Triage
+       // Keep description but invalidate recommendation and service
+       setAiRecommendation(null); 
+       updateIntake('serviceId', null);
+       setShowFullCatalog(false);
+    }
+    if (navTarget === 0) { // Going back to Jurisdiction
+        // Hard reset description too for consistency if needed, but let's keep it for now
+    }
+    
+    if (navTarget < 6) { 
+        updateIntake('signature', undefined);
+    }
+    
+    setIntakeStep(navTarget);
+    setNavTarget(null);
+  };
 
   return (
     <Layout 
@@ -1611,39 +1881,83 @@ const App = () => {
 
       {view === 'intake' && (
         <div className="py-12 px-4">
-          <div className="max-w-3xl mx-auto mb-8">
-            <div className="h-2 bg-slate-200 rounded-full overflow-hidden" aria-hidden="true">
-              <div 
-                className="h-full bg-brand-600 transition-all duration-500"
-                style={{ width: `${(intakeStep / 6) * 100}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-slate-500 mt-2 px-1" aria-hidden="true">
-               <span>Jurisdiction</span>
-               <span>Triage</span>
-               <span>Service</span>
-               <span>Details</span>
-               <span>Contact</span>
-               <span>Review</span>
-               <span>Pay</span>
-            </div>
-            <span className="sr-only">Step {intakeStep + 1} of 7</span>
+          <div className="max-w-4xl mx-auto mb-10">
+            <nav aria-label="Progress">
+              <ol role="list" className="flex items-center">
+                {STEPS.map((step, stepIdx) => {
+                    const isCompleted = stepIdx < intakeStep;
+                    const isCurrent = stepIdx === intakeStep;
+                    
+                    return (
+                      <li key={step.label} className={`${stepIdx !== STEPS.length - 1 ? 'w-full' : ''} relative`}>
+                         {/* Line */}
+                         {stepIdx !== STEPS.length - 1 && (
+                           <div className="absolute top-4 left-0 -right-0 h-0.5 bg-slate-200" aria-hidden="true">
+                             <div 
+                                className="h-full bg-brand-600 transition-all duration-500" 
+                                style={{ width: isCompleted ? '100%' : '0%' }} 
+                             />
+                           </div>
+                         )}
+                         
+                         {/* Dot/Button */}
+                         <button
+                            onClick={() => handleNavRequest(stepIdx)}
+                            disabled={!isCompleted} 
+                            className={`relative flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors z-10 bg-white
+                                ${isCompleted ? 'border-brand-600 bg-brand-600 text-white hover:bg-brand-700 cursor-pointer focus:ring-2 focus:ring-offset-2 focus:ring-brand-500' : ''}
+                                ${isCurrent ? 'border-brand-600 text-brand-600 ring-2 ring-offset-2 ring-brand-500 cursor-default' : ''}
+                                ${!isCompleted && !isCurrent ? 'border-slate-300 text-slate-500 cursor-not-allowed' : ''}
+                            `}
+                            aria-current={isCurrent ? 'step' : undefined}
+                            aria-label={`Go to step ${step.label}`}
+                         >
+                            {isCompleted ? <CheckCircle className="h-5 w-5" /> : stepIdx + 1}
+                         </button>
+                         
+                         {/* Label */}
+                         <div className="absolute top-10 left-4 -translate-x-1/2 w-32 flex justify-center">
+                             <span className={`text-xs font-medium text-center
+                                ${isCurrent ? 'text-brand-700' : 'text-slate-500'}
+                             `}>
+                                {step.label}
+                             </span>
+                         </div>
+                      </li>
+                    );
+                })}
+              </ol>
+            </nav>
           </div>
 
           {intakeStep === 0 && <JurisdictionGate onSelect={handleJurisdiction} />}
           
           {intakeStep === 1 && (
             <TriageAssistant 
+              currentInput={intakeData.details.description}
               onResult={handleTriageResult} 
-              onSkip={() => setIntakeStep(2)} 
+              onSkip={() => {
+                  setAiRecommendation(null);
+                  setShowFullCatalog(true);
+                  setIntakeStep(2);
+              }} 
             />
           )}
 
           {intakeStep === 2 && (
-            <ServiceSelection 
-              onSelect={handleServiceSelect} 
-              recommendedIds={aiRecommendedIds} 
-            />
+             !showFullCatalog && aiRecommendation ? (
+                 <ServiceRecommendation 
+                    recommendation={aiRecommendation}
+                    onConfirm={handleRecommendationConfirm}
+                    onShowCatalog={() => setShowFullCatalog(true)}
+                 />
+             ) : (
+                 <ServiceCatalog 
+                    onSelect={handleServiceSelect} 
+                    recommendation={aiRecommendation}
+                    selectedId={intakeData.serviceId}
+                 />
+             )
           )}
           
           {intakeStep === 3 && (
@@ -1666,6 +1980,7 @@ const App = () => {
             <EngagementLetter 
               data={intakeData}
               onSign={handleSignature}
+              onEdit={() => setIntakeStep(4)}
             />
           )}
           {intakeStep === 6 && (
@@ -1687,6 +2002,14 @@ const App = () => {
       {view === 'admin' && (
         <AdminDashboard isAuthenticated={!!user && user.role === 'admin'} />
       )}
+
+      <NavConfirmModal 
+        isOpen={navTarget !== null} 
+        onConfirm={handleNavConfirm} 
+        onCancel={() => setNavTarget(null)} 
+        targetStepLabel={navTarget !== null ? STEPS[navTarget].label : ''}
+      />
+
     </Layout>
   );
 };

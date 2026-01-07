@@ -1,5 +1,33 @@
 # SoloScale Legal - Development Log
 
+## v0.1.8 - Trust & Verification
+**Status:** High-Fidelity Prototype
+**Focus:** Pre-Signature Review & Data Validation
+
+### 🚀 Features Shipped
+*   **Enhanced Review Step:**
+    *   **Contextual Summaries:** Added a clear, read-only summary of the selected Service (including description and estimated price) and Contact Information above the Engagement Letter.
+    *   **Edit Workflows:** Added specific "Edit" functionality allowing users to jump back to the Contact step to correct PII before signing.
+    *   **Visual Hierarchy:** Reorganized Step 5 (Review & Sign) to prioritize "Verify" -> "Read" -> "Sign" flow, reducing anxiety at the point of commitment.
+
+## v0.1.7 - Express Lane & AI Refinement
+**Status:** High-Fidelity Prototype
+**Focus:** Intake Efficiency & AI Personality
+
+### 🚀 Features Shipped
+*   **Express Lane Intake:**
+    *   Implemented a "Triage -> Recommendation -> Confirmation" flow.
+    *   Users with high-confidence matches can confirm the recommended service immediately, skipping the full catalog browse.
+    *   **Smart Catalog:** If users opt to browse all services, the AI-recommended option is pinned to the top with a "Recommended" badge.
+*   **GenAI 3.0 Integration:**
+    *   Upgraded AI model to **Gemini 3.0 Flash Preview**.
+    *   Implemented **Structured Output (JSON Schema)** using the new `@google/genai` SDK to ensure 100% reliable type-safe responses (removing brittle regex parsing).
+*   **Prompt Engineering Polish:**
+    *   **Tone Shift:** Rewrote system instructions to force "Friendly, confident, non-legalese" output.
+    *   **Sanitization:** Explicitly instructed the model to hide internal IDs (e.g., `attorney_review`) and robotic terms in client-facing explanations.
+*   **Navigation Guardrails:**
+    *   Added `NavConfirmModal`: Intercepts backward navigation requests to warn users that changing previous answers (like Jurisdiction) may invalidate current progress.
+
 ## v0.1.6 - UX Copy & Polish
 **Status:** High-Fidelity Prototype
 **Focus:** Microcopy & Visual Polish

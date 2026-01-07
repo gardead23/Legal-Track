@@ -6,7 +6,7 @@
 *   **Icons:** `Lucide React` (clean, accessible SVG icons).
 *   **Auth:** `Supabase Auth` (Magic Links for Clients, MFA for Admins).
 *   **Storage:** `Supabase Storage` (S3 compatible) with RLS.
-*   **AI/LLM:** `Google Gemini 2.5 Flash` via `@google/genai` (For intake triage).
+*   **AI/LLM:** `Google Gemini 3.0 Flash Preview` via `@google/genai` (utilizing `responseSchema` for structured JSON).
 
 ## 2. Key Architectural Decisions
 
@@ -33,7 +33,8 @@
 **Reasoning:** Users need to see the price update in real-time as they add "Partners" or "Pages" to feel in control of the cost.
 
 ### E. AI Triage Strategy (Strict Classification)
-**Decision:** AI analyzes plain text to suggest services but is RESTRICTED to a hardcoded enum list.
+**Decision:** AI analyzes plain text to suggest services utilizing **Structured Generation**.
+*   **Tech:** Uses `gemini-3-flash-preview` with `responseSchema` and `Type.OBJECT`.
 *   **Constraint:** The LLM prompt explicitly forbids inventing services. It must map to: `Contract Review`, `Demand Letter`, `Affidavit`, `Deposition`, `Motion`, `Lawsuit`, `Answer`.
 *   **Fallback:** Any ambiguity or out-of-scope topic (Criminal, Family Law) maps to `Attorney Review`.
 *   **UX:** AI output is a *suggestion*, not a decision. The user must manually confirm the selection.
